@@ -1,40 +1,40 @@
-# PLC2MES ¡ª PLC ? MES HTTP ²âÊÔ¹¤¾ß
+ï»¿# PLC2MES â€” PLC â†” MES HTTP æµ‹è¯•å·¥å…·
 
-±¾ÏîÄ¿ÎªÒ»¿î»ùÓÚ C# + Windows Forms µÄ×ÀÃæ¹¤¾ß£¬ÓÃÓÚ°ïÖú PLC ¹¤³ÌÊ¦±àĞ´ÌØ¶¨¸ñÊ½µÄ HTTP ÇëÇóÄ£°å¡¢·¢ËÍÇëÇó¡¢½âÎö JSON ÏìÓ¦²¢ÌáÈ¡±äÁ¿£¬×îÖÕÍ¨¹ıÓÃ»§¶¨ÒåµÄ³É¹¦ÅĞ¶Ï±í´ïÊ½ÅĞ¶¨Ò»´Î½»»¥ÊÇ·ñ³É¹¦¡£
+æœ¬é¡¹ç›®ä¸ºä¸€æ¬¾åŸºäº C# + Windows Forms çš„æ¡Œé¢å·¥å…·ï¼Œç”¨äºå¸®åŠ© PLC å·¥ç¨‹å¸ˆç¼–å†™ç‰¹å®šæ ¼å¼çš„ HTTP è¯·æ±‚æ¨¡æ¿ã€å‘é€è¯·æ±‚ã€è§£æ JSON å“åº”å¹¶æå–å˜é‡ï¼Œæœ€ç»ˆé€šè¿‡ç”¨æˆ·å®šä¹‰çš„æˆåŠŸåˆ¤æ–­è¡¨è¾¾å¼åˆ¤å®šä¸€æ¬¡äº¤äº’æ˜¯å¦æˆåŠŸã€‚
 
-ÌØµã
--´¿ .NET ÊµÏÖ£¬ÎŞĞè¶îÍâ NuGet °ü£¨ÊÊºÏÎŞÍøÂçµÄ¿ª·¢»·¾³£©
-- ¿É×Ô¶¨ÒåÇëÇóÄ£°åÓëÏìÓ¦Ä£°å£¬×Ô¶¯ÌáÈ¡±äÁ¿
-- Ö§³Ö×Ö·û´®/ÊıÖµ/²¼¶û/ÈÕÆÚÀàĞÍ£¨String/Int/Float/Bool/DateTime£©
-- Ö§³Ö³É¹¦Ìõ¼ş±í´ïÊ½£¨&&, ||, =, >, <, >=, <=, like£©
-- ¿ÉÔÚ UI ÖĞ±à¼­ÇëÇó±äÁ¿²¢²é¿´ÏìÓ¦ÓëÌáÈ¡µ½µÄ±äÁ¿
+ç‰¹ç‚¹
+-çº¯ .NET å®ç°ï¼Œæ— éœ€é¢å¤– NuGet åŒ…ï¼ˆé€‚åˆæ— ç½‘ç»œçš„å¼€å‘ç¯å¢ƒï¼‰
+- å¯è‡ªå®šä¹‰è¯·æ±‚æ¨¡æ¿ä¸å“åº”æ¨¡æ¿ï¼Œè‡ªåŠ¨æå–å˜é‡
+- æ”¯æŒå­—ç¬¦ä¸²/æ•°å€¼/å¸ƒå°”/æ—¥æœŸç±»å‹ï¼ˆString/Int/Float/Bool/DateTimeï¼‰
+- æ”¯æŒæˆåŠŸæ¡ä»¶è¡¨è¾¾å¼ï¼ˆ&&, ||, =, >, <, >=, <=, likeï¼‰
+- å¯åœ¨ UI ä¸­ç¼–è¾‘è¯·æ±‚å˜é‡å¹¶æŸ¥çœ‹å“åº”ä¸æå–åˆ°çš„å˜é‡
 
-¿ìËÙ¿ªÊ¼
+å¿«é€Ÿå¼€å§‹
 
-1. »·¾³ÒªÇó
+1. ç¯å¢ƒè¦æ±‚
  - Windows
- - .NET8 SDK£¨»òÔÚ Visual Studio ÖĞÑ¡ÔñÄ¿±ê¿ò¼ÜÎª net8.0-windows£©
- - Visual Studio2022 »ò¸ü¸ß£¨ÍÆ¼ö£©
+ - .NET8 SDKï¼ˆæˆ–åœ¨ Visual Studio ä¸­é€‰æ‹©ç›®æ ‡æ¡†æ¶ä¸º net8.0-windowsï¼‰
+ - Visual Studio2022 æˆ–æ›´é«˜ï¼ˆæ¨èï¼‰
 
-2. ¹¹½¨ÓëÔËĞĞ£¨ÃüÁîĞĞ£©
- - ´ÓÏîÄ¿Ä¿Â¼£¨°üº¬ `PLC2MES.csproj`£©Ö´ĞĞ£º
+2. æ„å»ºä¸è¿è¡Œï¼ˆå‘½ä»¤è¡Œï¼‰
+ - ä»é¡¹ç›®ç›®å½•ï¼ˆåŒ…å« `PLC2MES.csproj`ï¼‰æ‰§è¡Œï¼š
  ```bash
  dotnet build
  dotnet run --project PLC2MES/PLC2MES.csproj
  ```
- - »òÔÚ Visual Studio ÖĞ´ò¿ª½â¾ö·½°¸²¢ÔËĞĞ¡£
+ - æˆ–åœ¨ Visual Studio ä¸­æ‰“å¼€è§£å†³æ–¹æ¡ˆå¹¶è¿è¡Œã€‚
 
-3. Ê¹ÓÃ·½·¨£¨¿ìËÙÑİÊ¾£©
- - ´ò¿ª³ÌĞò£¬ÌîĞ´ `Base URL`£¨ÀıÈç `http://httpbin.org` ÓÃÓÚ²âÊÔ£©
- - ÔÚ¡°ÇëÇóÄ£°å¡±ÇøÓòÕ³ÈëÄ£°åÎÄ±¾£¬µã»÷¡°½âÎöÄ£°å¡±
- - ÔÚ¡°±äÁ¿¹ÜÀí¡±ÖĞÎªÇëÇó±äÁ¿ÌîĞ´Öµ
- - µã»÷¡°·¢ËÍÇëÇó¡±²¢ÔÚ¡°Ö´ĞĞ½á¹û¡±ÖĞ²é¿´ÇëÇó¡¢ÏìÓ¦ÒÔ¼°³É¹¦ÅĞ¶Ï½á¹û
+3. ä½¿ç”¨æ–¹æ³•ï¼ˆå¿«é€Ÿæ¼”ç¤ºï¼‰
+ - æ‰“å¼€ç¨‹åºï¼Œå¡«å†™ `Base URL`ï¼ˆä¾‹å¦‚ `http://httpbin.org` ç”¨äºæµ‹è¯•ï¼‰
+ - åœ¨â€œè¯·æ±‚æ¨¡æ¿â€åŒºåŸŸç²˜å…¥æ¨¡æ¿æ–‡æœ¬ï¼Œç‚¹å‡»â€œè§£ææ¨¡æ¿â€
+ - åœ¨â€œå˜é‡ç®¡ç†â€ä¸­ä¸ºè¯·æ±‚å˜é‡å¡«å†™å€¼
+ - ç‚¹å‡»â€œå‘é€è¯·æ±‚â€å¹¶åœ¨â€œæ‰§è¡Œç»“æœâ€ä¸­æŸ¥çœ‹è¯·æ±‚ã€å“åº”ä»¥åŠæˆåŠŸåˆ¤æ–­ç»“æœ
 
-Ä£°åÓï·¨ËµÃ÷£¨¼òÒª£©
-- URL / Header ÖĞµÄ±äÁ¿£º`@(VarName)` »ò `@(VarName:format)`£¨Ö±½ÓÌæ»»ÎÄ±¾£©
-- Body ÖĞµÄ±äÁ¿£¨±ØĞëĞ´ÀàĞÍ£©£º`@Type(VarName)` »ò `@Type(VarName:format)`£¬Type Ö§³Ö£º`Bool, Int, Float, String, DateTime, Number`
+æ¨¡æ¿è¯­æ³•è¯´æ˜ï¼ˆç®€è¦ï¼‰
+- URL / Header ä¸­çš„å˜é‡ï¼š`@(VarName)` æˆ– `@(VarName:format)`ï¼ˆç›´æ¥æ›¿æ¢æ–‡æœ¬ï¼‰
+- Body ä¸­çš„å˜é‡ï¼ˆå¿…é¡»å†™ç±»å‹ï¼‰ï¼š`@Type(VarName)` æˆ– `@Type(VarName:format)`ï¼ŒType æ”¯æŒï¼š`Bool, Int, Float, String, DateTime, Number`
 
-Ê¾Àı£ºÇëÇóÄ£°å
+ç¤ºä¾‹ï¼šè¯·æ±‚æ¨¡æ¿
 ```
 POST /post?station=@(StationID:d)&mode=@(Mode)
 User-Agent: PLC2MES_Tool
@@ -48,7 +48,7 @@ Content-Type: application/json
 }
 ```
 
-Ê¾Àı£ºÏìÓ¦Ä£°å
+ç¤ºä¾‹ï¼šå“åº”æ¨¡æ¿
 ```
 200 OK
 Content-Type: application/json
@@ -69,45 +69,38 @@ Content-Type: application/json
 }
 ```
 
-Ê¾Àı£º³É¹¦Ìõ¼ş
+ç¤ºä¾‹ï¼šæˆåŠŸæ¡ä»¶
 ```
 $StatusCode=200 && Start_Success && Start_Token>0 && EchoSerial like "SN%"
 ```
 
-ÏîÄ¿½á¹¹£¨¸ÅÒª£©
+é¡¹ç›®ç»“æ„ï¼ˆæ¦‚è¦ï¼‰
 ```
 PLC2MES/
-©À©¤©¤ Core/
-©¦ ©À©¤©¤ Models/ // Êı¾İÄ£ĞÍ£ºVariable, TemplateExpression, HttpRequestTemplate, HttpResponseTemplate ...
-©¦ ©À©¤©¤ Parsers/ //½âÎöÆ÷£ºRequestTemplateParser, ResponseTemplateParser, SuccessCriteriaParser
-©¦ ©À©¤©¤ Processors/ //´¦ÀíÆ÷£ºJsonProcessor, HttpRequestProcessor, HttpResponseProcessor
-©¦ ©¸©¤©¤ Services/ //ÒµÎñ·şÎñ£ºVariableManager, HttpTestService
-©À©¤©¤ Utils/ // ¸¨Öú¹¤¾ß£ºStringHelper, TypeConverter, RegexPatterns, Logger
-©À©¤©¤ Form1.cs // WinForms UIÂß¼­
-©À©¤©¤ Form1.Designer.cs // UI ¿Ø¼ş
-©À©¤©¤ Program.cs
-©¸©¤©¤ PLC2MES.csproj
+â”œâ”€â”€ Core/
+â”‚ â”œâ”€â”€ Models/ // æ•°æ®æ¨¡å‹ï¼šVariable, TemplateExpression, HttpRequestTemplate, HttpResponseTemplate ...
+â”‚ â”œâ”€â”€ Parsers/ //è§£æå™¨ï¼šRequestTemplateParser, ResponseTemplateParser, SuccessCriteriaParser
+â”‚ â”œâ”€â”€ Processors/ //å¤„ç†å™¨ï¼šJsonProcessor, HttpRequestProcessor, HttpResponseProcessor
+â”‚ â””â”€â”€ Services/ //ä¸šåŠ¡æœåŠ¡ï¼šVariableManager, HttpTestService
+â”œâ”€â”€ Utils/ // è¾…åŠ©å·¥å…·ï¼šStringHelper, TypeConverter, RegexPatterns, Logger
+â”œâ”€â”€ Form1.cs // WinForms UIé€»è¾‘
+â”œâ”€â”€ Form1.Designer.cs // UI æ§ä»¶
+â”œâ”€â”€ Program.cs
+â””â”€â”€ PLC2MES.csproj
 ```
 
-ÀëÏß¿ª·¢×¢ÒâÊÂÏî
-- ±¾ÏîÄ¿²»ÒÀÀµÍâ²¿ NuGet °ü£¬ËùÓĞÒÀÀµ¾ùÊ¹ÓÃ .NET ±ê×¼¿â£¨System.Text.Json¡¢System.Net µÈ£©£¬ÊÊºÏÀëÏß»úÆ÷¿ª·¢¡£
-- ÈôÔÚÄã±¾µØ»·¾³Ê¹ÓÃ¾É°æ±¾µÄ .NET£¬ÇëÈ·±£ JSON ¿â¿ÉÓÃ»òÌæ»»Îª `JavaScriptSerializer`£¨ĞèÒıÓÃ `System.Web.Extensions`£©£¬µ«µ±Ç°²Ö¿âÊ¹ÓÃ `System.Text.Json`¡£
+ç¦»çº¿å¼€å‘æ³¨æ„äº‹é¡¹
+- æœ¬é¡¹ç›®ä¸ä¾èµ–å¤–éƒ¨ NuGet åŒ…ï¼Œæ‰€æœ‰ä¾èµ–å‡ä½¿ç”¨ .NET æ ‡å‡†åº“ï¼ˆSystem.Text.Jsonã€System.Net ç­‰ï¼‰ï¼Œé€‚åˆç¦»çº¿æœºå™¨å¼€å‘ã€‚
+- è‹¥åœ¨ä½ æœ¬åœ°ç¯å¢ƒä½¿ç”¨æ—§ç‰ˆæœ¬çš„ .NETï¼Œè¯·ç¡®ä¿ JSON åº“å¯ç”¨æˆ–æ›¿æ¢ä¸º `JavaScriptSerializer`ï¼ˆéœ€å¼•ç”¨ `System.Web.Extensions`ï¼‰ï¼Œä½†å½“å‰ä»“åº“ä½¿ç”¨ `System.Text.Json`ã€‚
 
-¹±Ï×Ö¸ÄÏ
-- Fork ºóÔÚ feature ·ÖÖ§ÉÏ¿ª·¢£¬Ìá½» PR Ç°È·±££º
- -´úÂë×ñÑ­ÏÖÓĞÃüÃûÓë·ç¸ñ
- -ÔËĞĞ `dotnet build` ÎŞ´íÎó
- - Èç¸Ä¶¯½âÎöÂß¼­£¬ĞèÌí¼Ó»ò¸üĞÂÊ¾ÀıÄ£°åÒÔ±ã²âÊÔ
+è´¡çŒ®æŒ‡å—
+- Fork ååœ¨ feature åˆ†æ”¯ä¸Šå¼€å‘ï¼Œæäº¤ PR å‰ç¡®ä¿ï¼š
+ -ä»£ç éµå¾ªç°æœ‰å‘½åä¸é£æ ¼
+ -è¿è¡Œ `dotnet build` æ— é”™è¯¯
+ - å¦‚æ”¹åŠ¨è§£æé€»è¾‘ï¼Œéœ€æ·»åŠ æˆ–æ›´æ–°ç¤ºä¾‹æ¨¡æ¿ä»¥ä¾¿æµ‹è¯•
 
-Ğí¿ÉÖ¤
-- ±¾ÏîÄ¿Ä¬ÈÏÊ¹ÓÃ MITĞí¿ÉÖ¤£¨ÈçĞè±ä¸üÇëĞŞ¸Ä `LICENSE`£©¡£
+è®¸å¯è¯
+- æœ¬é¡¹ç›®é»˜è®¤ä½¿ç”¨ MITè®¸å¯è¯ï¼ˆå¦‚éœ€å˜æ›´è¯·ä¿®æ”¹ `LICENSE`ï¼‰ã€‚
 
-ÁªÏµ·½Ê½
-- ¿ª·¢Õß£ºÄÚ²¿Ê¹ÓÃ£¬°´¹«Ë¾Á÷³Ì¹ÜÀí°æ±¾Óë·¢²¼¡£
-
----
-
-Èç¹ûĞèÒª£¬ÎÒ¿ÉÒÔ£º
-- °Ñ README ×ªÎªÓ¢ÎÄ°æ±¾£»
-- Ìí¼Ó¸ü¶àÊ¾ÀıÄ£°åµ½ `Examples/`Ä¿Â¼²¢Ìá½»£»
--Éú³É¼òµ¥µÄ·¢²¼½Å±¾£¨zip ´ò°ü£©¡£
+è”ç³»æ–¹å¼
+- å¼€å‘è€…ï¼šå†…éƒ¨ä½¿ç”¨ï¼ŒæŒ‰å…¬å¸æµç¨‹ç®¡ç†ç‰ˆæœ¬ä¸å‘å¸ƒã€‚
