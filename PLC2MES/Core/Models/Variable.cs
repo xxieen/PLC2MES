@@ -1,0 +1,98 @@
+using System;
+
+namespace PLC2MES.Core.Models
+{
+    public class Variable
+    {
+        public string Name { get; set; }
+        public VariableType Type { get; set; }
+        public object Value { get; set; }
+        public string FormatString { get; set; }
+        public VariableSource Source { get; set; }
+
+        public Variable() { }
+
+        public Variable(string name, VariableType type, VariableSource source, string formatString = null)
+        {
+            Name = name;
+            Type = type;
+            Source = source;
+            FormatString = formatString;
+            Value = GetDefaultValue(type);
+        }
+
+        private object GetDefaultValue(VariableType type)
+        {
+            switch (type)
+            {
+                case VariableType.Bool:
+                    return false;
+                case VariableType.Int:
+                    return 0;
+                case VariableType.Float:
+                    return 0.0;
+                case VariableType.String:
+                    return string.Empty;
+                case VariableType.DateTime:
+                    return DateTime.Now;
+                default:
+                    return null;
+            }
+        }
+
+        public string GetFormattedValue()
+        {
+            if (Value == null)
+                return string.Empty;
+
+            if (Type == VariableType.DateTime && !string.IsNullOrEmpty(FormatString))
+            {
+                if (Value is DateTime dt)
+                    return dt.ToString(FormatString);
+            }
+
+            if (Type == VariableType.Bool)
+            {
+                return Value.ToString().ToLower();
+            }
+
+            return Value.ToString();
+        }
+
+        public bool TrySetValue(string valueString)
+        {
+            try
+            {
+                switch (Type)
+                {
+                    case VariableType.Bool:
+                        Value = bool.Parse(valueString);
+                        return true;
+                    case VariableType.Int:
+                        Value = int.Parse(valueString);
+                        return true;
+                    case VariableType.Float:
+                        Value = double.Parse(valueString);
+                        return true;
+                    case VariableType.String:
+                        Value = valueString;
+                        return true;
+                    case VariableType.DateTime:
+                        Value = DateTime.Parse(valueString);
+                        return true;
+                    default:
+                        return false;
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public override string ToString()
+        {
+            return $"{Name} ({Type}) = {Value}";
+        }
+    }
+}
