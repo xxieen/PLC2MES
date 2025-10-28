@@ -16,21 +16,32 @@ namespace PLC2MES.Core.Processors
 
         public string BuildRequest(HttpRequestTemplate template, Dictionary<string, Variable> variables)
         {
-            var sb = new StringBuilder();
-            string processedUrl = ProcessUrl(template.Url, template.Expressions, variables);
-            sb.AppendLine($"{template.Method} {processedUrl}");
-            foreach (var header in template.Headers)
+            Logger.LogInfo("HttpRequestProcessor: BuildRequest called");
+            try
             {
-                string processedValue = ProcessHeaderValue(header.Value, template.Expressions, variables);
-                sb.AppendLine($"{header.Key}: {processedValue}");
+                var sb = new StringBuilder();
+                string processedUrl = ProcessUrl(template.Url, template.Expressions, variables);
+                sb.AppendLine($"{template.Method} {processedUrl}");
+                foreach (var header in template.Headers)
+                {
+                    string processedValue = ProcessHeaderValue(header.Value, template.Expressions, variables);
+                    sb.AppendLine($"{header.Key}: {processedValue}");
+                }
+                if (!string.IsNullOrWhiteSpace(template.BodyTemplate))
+                {
+                    sb.AppendLine();
+                    string processedBody = ProcessBody(template.BodyTemplate, template.Expressions, variables);
+                    sb.Append(processedBody);
+                }
+                var requestText = sb.ToString();
+                Logger.LogInfo($"HttpRequestProcessor: BuildRequest finished, method={template.Method}, url={processedUrl}, bodyLength={requestText.Length}");
+                return requestText;
             }
-            if (!string.IsNullOrWhiteSpace(template.BodyTemplate))
+            catch (Exception ex)
             {
-                sb.AppendLine();
-                string processedBody = ProcessBody(template.BodyTemplate, template.Expressions, variables);
-                sb.Append(processedBody);
+                Logger.LogError("HttpRequestProcessor: BuildRequest failed", ex);
+                throw;
             }
-            return sb.ToString();
         }
 
         private string ProcessUrl(string url, List<TemplateExpression> expressions, Dictionary<string, Variable> variables)
@@ -93,12 +104,13 @@ namespace PLC2MES.Core.Processors
         public async Task<HttpResponseData> SendRequestAsync(string baseUrl, string method, string path, Dictionary<string, string> headers, string body)
         {
             var response = new HttpResponseData();
+            Logger.LogInfo($"HttpRequestProcessor: SendRequestAsync called, baseUrl={baseUrl}, method={method}, path={path}, headers={headers?.Count ??0}, bodyLength={(body?.Length ??0)}");
             try
             {
                 string fullUrl = baseUrl.TrimEnd('/') + path;
                 HttpWebRequest request = (HttpWebRequest)WebRequest.Create(fullUrl);
                 request.Method = method;
-                request.Timeout = 30000;
+                request.Timeout =30000;
                 foreach (var header in headers)
                 {
                     switch (header.Key.ToLower())
@@ -113,7 +125,7 @@ namespace PLC2MES.Core.Processors
                 {
                     var bodyBytes = Encoding.UTF8.GetBytes(body);
                     request.ContentLength = bodyBytes.Length;
-                    using (var rs = await request.GetRequestStreamAsync()) { await rs.WriteAsync(bodyBytes, 0, bodyBytes.Length); }
+                    using (var rs = await request.GetRequestStreamAsync()) { await rs.WriteAsync(bodyBytes,0, bodyBytes.Length); }
                 }
                 using (var webResp = (HttpWebResponse)await request.GetResponseAsync())
                 {
@@ -122,10 +134,12 @@ namespace PLC2MES.Core.Processors
                     response.IsSuccess = true;
                     foreach (string key in webResp.Headers.AllKeys) response.Headers[key] = webResp.Headers[key];
                     using (var reader = new StreamReader(webResp.GetResponseStream(), Encoding.UTF8)) response.Body = await reader.ReadToEndAsync();
+                    Logger.LogInfo($"HttpRequestProcessor: Received response status={response.StatusCode}");
                 }
             }
             catch (WebException ex)
             {
+                Logger.LogError("HttpRequestProcessor: WebException during SendRequestAsync", ex);
                 if (ex.Response != null)
                 {
                     var err = (HttpWebResponse)ex.Response;
@@ -137,7 +151,12 @@ namespace PLC2MES.Core.Processors
                 }
                 else { response.IsSuccess = false; response.ErrorMessage = ex.Message; }
             }
-            catch (Exception ex) { response.IsSuccess = false; response.ErrorMessage = ex.Message; }
+            catch (Exception ex)
+            {
+                Logger.LogError("HttpRequestProcessor: Exception during SendRequestAsync", ex);
+                response.IsSuccess = false;
+                response.ErrorMessage = ex.Message;
+            }
             return response;
         }
     }

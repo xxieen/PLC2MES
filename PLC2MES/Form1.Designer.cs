@@ -1,4 +1,7 @@
-﻿namespace PLC2MES
+﻿using System.Windows.Forms;
+using System.Drawing;
+
+namespace PLC2MES
 {
     partial class Form1
     {
@@ -7,19 +10,19 @@
         /// </summary>
         private System.ComponentModel.IContainer components = null;
 
-        // UI controls
-        private System.Windows.Forms.TextBox txtBaseUrl;
-        private System.Windows.Forms.TextBox txtRequestTemplate;
-        private System.Windows.Forms.TextBox txtResponseTemplate;
-        private System.Windows.Forms.TextBox txtSuccessCriteria;
-        private System.Windows.Forms.Button btnParseTemplates;
-        private System.Windows.Forms.Button btnSendRequest;
-        private System.Windows.Forms.DataGridView dgvRequestVariables;
-        private System.Windows.Forms.DataGridView dgvResponseVariables;
-        private System.Windows.Forms.RichTextBox rtbRequest;
-        private System.Windows.Forms.RichTextBox rtbResponse;
-        private System.Windows.Forms.Label lblStatus;
-        private System.Windows.Forms.Label lblDuration;
+        // UI controls (keep original names)
+        private TextBox txtBaseUrl;
+        private TextBox txtRequestTemplate;
+        private TextBox txtResponseTemplate;
+        private TextBox txtSuccessCriteria;
+        private Button btnParseTemplates;
+        private Button btnSendRequest;
+        private DataGridView dgvRequestVariables;
+        private DataGridView dgvResponseVariables;
+        private RichTextBox rtbRequest;
+        private RichTextBox rtbResponse;
+        private Label lblStatus;
+        private Label lblDuration;
 
         /// <summary>
         ///  Clean up any resources being used.
@@ -39,9 +42,13 @@
         /// <summary>
         ///  Required method for Designer support - do not modify
         ///  the contents of this method with the code editor.
+        ///  This layout uses TableLayoutPanel so controls resize responsively.
         /// </summary>
         private void InitializeComponent()
         {
+            components = new System.ComponentModel.Container();
+
+            // Create controls
             txtBaseUrl = new TextBox();
             txtRequestTemplate = new TextBox();
             txtResponseTemplate = new TextBox();
@@ -54,144 +61,162 @@
             rtbResponse = new RichTextBox();
             lblStatus = new Label();
             lblDuration = new Label();
-            ((System.ComponentModel.ISupportInitialize)dgvRequestVariables).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)dgvResponseVariables).BeginInit();
-            SuspendLayout();
-            // 
-            // txtBaseUrl
-            // 
-            txtBaseUrl.Location = new Point(12, 12);
-            txtBaseUrl.Name = "txtBaseUrl";
-            txtBaseUrl.Size = new Size(600, 30);
-            txtBaseUrl.TabIndex = 0;
-            txtBaseUrl.Text = "http://localhost:8080";
-            // 
-            // txtRequestTemplate
-            // 
-            txtRequestTemplate.Font = new Font("Consolas", 10F);
-            txtRequestTemplate.Location = new Point(12, 45);
+
+            // Form
+            this.SuspendLayout();
+            this.AutoScaleMode = AutoScaleMode.Font;
+            this.ClientSize = new Size(1000, 700);
+            this.Text = "PLC-MES HTTP 测试工具";
+
+            // Main table with 2 columns
+            var mainLayout = new TableLayoutPanel();
+            mainLayout.Dock = DockStyle.Fill;
+            mainLayout.ColumnCount = 2;
+            mainLayout.RowCount = 1;
+            mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 60F));
+            mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40F));
+
+            // Left layout: 3 rows (Request, Response, SuccessCriteria)
+            var leftLayout = new TableLayoutPanel();
+            leftLayout.Dock = DockStyle.Fill;
+            leftLayout.ColumnCount = 1;
+            leftLayout.RowCount = 3;
+            leftLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 50F)); // request
+            leftLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 35F)); // response
+            leftLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 15F)); // criteria
+
+            // Request template textbox
             txtRequestTemplate.Multiline = true;
-            txtRequestTemplate.Name = "txtRequestTemplate";
             txtRequestTemplate.ScrollBars = ScrollBars.Both;
-            txtRequestTemplate.Size = new Size(480, 240);
-            txtRequestTemplate.TabIndex = 3;
-            // 
-            // txtResponseTemplate
-            // 
-            txtResponseTemplate.Font = new Font("Consolas", 10F);
-            txtResponseTemplate.Location = new Point(12, 295);
+            txtRequestTemplate.Font = new Font("Consolas", 10F);
+            txtRequestTemplate.Dock = DockStyle.Fill;
+            txtRequestTemplate.Name = "txtRequestTemplate";
+
+            // Response template textbox
             txtResponseTemplate.Multiline = true;
-            txtResponseTemplate.Name = "txtResponseTemplate";
             txtResponseTemplate.ScrollBars = ScrollBars.Both;
-            txtResponseTemplate.Size = new Size(480, 200);
-            txtResponseTemplate.TabIndex = 4;
-            // 
-            // txtSuccessCriteria
-            // 
-            txtSuccessCriteria.Font = new Font("Consolas", 10F);
-            txtSuccessCriteria.Location = new Point(12, 505);
+            txtResponseTemplate.Font = new Font("Consolas", 10F);
+            txtResponseTemplate.Dock = DockStyle.Fill;
+            txtResponseTemplate.Name = "txtResponseTemplate";
+
+            // Success criteria textbox
             txtSuccessCriteria.Multiline = true;
-            txtSuccessCriteria.Name = "txtSuccessCriteria";
             txtSuccessCriteria.ScrollBars = ScrollBars.Horizontal;
-            txtSuccessCriteria.Size = new Size(480, 80);
-            txtSuccessCriteria.TabIndex = 5;
-            // 
-            // btnParseTemplates
-            // 
-            btnParseTemplates.Location = new Point(620, 10);
-            btnParseTemplates.Name = "btnParseTemplates";
-            btnParseTemplates.Size = new Size(124, 32);
-            btnParseTemplates.TabIndex = 1;
+            txtSuccessCriteria.Font = new Font("Consolas", 10F);
+            txtSuccessCriteria.Dock = DockStyle.Fill;
+            txtSuccessCriteria.Name = "txtSuccessCriteria";
+
+            leftLayout.Controls.Add(txtRequestTemplate, 0, 0);
+            leftLayout.Controls.Add(txtResponseTemplate, 0, 1);
+            leftLayout.Controls.Add(txtSuccessCriteria, 0, 2);
+
+            // Right layout: 4 rows (top: baseUrl+buttons, request vars, response vars, bottom: request/response preview)
+            var rightLayout = new TableLayoutPanel();
+            rightLayout.Dock = DockStyle.Fill;
+            rightLayout.ColumnCount = 1;
+            rightLayout.RowCount = 4;
+            rightLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
+            rightLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
+            rightLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 30F));
+            rightLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 20F));
+
+            // Top panel (baseUrl + buttons)
+            var topPanel = new FlowLayoutPanel();
+            topPanel.Dock = DockStyle.Fill;
+            topPanel.FlowDirection = FlowDirection.LeftToRight;
+            topPanel.Padding = new Padding(4);
+
+            var lblBase = new Label();
+            lblBase.Text = "Base URL:";
+            lblBase.AutoSize = true;
+            lblBase.TextAlign = ContentAlignment.MiddleLeft;
+            lblBase.Padding = new Padding(6, 8, 6, 4);
+
+            txtBaseUrl.Dock = DockStyle.Fill;
+            txtBaseUrl.Width = 300;
+            txtBaseUrl.Name = "txtBaseUrl";
+            txtBaseUrl.Text = "http://localhost:8080";
+
             btnParseTemplates.Text = "解析模板 (F5)";
-            // 
-            // btnSendRequest
-            // 
-            btnSendRequest.Location = new Point(750, 10);
-            btnSendRequest.Name = "btnSendRequest";
-            btnSendRequest.Size = new Size(124, 32);
-            btnSendRequest.TabIndex = 2;
+            btnParseTemplates.AutoSize = true;
+            btnParseTemplates.Name = "btnParseTemplates";
+
             btnSendRequest.Text = "发送请求 (F6)";
-            // 
-            // dgvRequestVariables
-            // 
+            btnSendRequest.AutoSize = true;
+            btnSendRequest.Name = "btnSendRequest";
+
+            topPanel.Controls.Add(lblBase);
+            topPanel.Controls.Add(txtBaseUrl);
+            topPanel.Controls.Add(btnParseTemplates);
+            topPanel.Controls.Add(btnSendRequest);
+
+            // Request variables grid
+            dgvRequestVariables.Dock = DockStyle.Fill;
+            dgvRequestVariables.Name = "dgvRequestVariables";
             dgvRequestVariables.AllowUserToAddRows = false;
             dgvRequestVariables.AllowUserToDeleteRows = false;
-            dgvRequestVariables.ColumnHeadersHeight = 34;
-            dgvRequestVariables.Location = new Point(500, 45);
-            dgvRequestVariables.Name = "dgvRequestVariables";
-            dgvRequestVariables.RowHeadersWidth = 62;
-            dgvRequestVariables.Size = new Size(480, 220);
-            dgvRequestVariables.TabIndex = 6;
-            // 
-            // dgvResponseVariables
-            // 
+
+            // Response variables grid
+            dgvResponseVariables.Dock = DockStyle.Fill;
+            dgvResponseVariables.Name = "dgvResponseVariables";
             dgvResponseVariables.AllowUserToAddRows = false;
             dgvResponseVariables.AllowUserToDeleteRows = false;
-            dgvResponseVariables.ColumnHeadersHeight = 34;
-            dgvResponseVariables.Location = new Point(500, 295);
-            dgvResponseVariables.Name = "dgvResponseVariables";
             dgvResponseVariables.ReadOnly = true;
-            dgvResponseVariables.RowHeadersWidth = 62;
-            dgvResponseVariables.Size = new Size(480, 200);
-            dgvResponseVariables.TabIndex = 7;
-            // 
-            // rtbRequest
-            // 
-            rtbRequest.Location = new Point(12, 595);
-            rtbRequest.Name = "rtbRequest";
+
+            // Bottom preview panel with two RichTextBoxes side by side
+            var previewSplit = new TableLayoutPanel();
+            previewSplit.Dock = DockStyle.Fill;
+            previewSplit.ColumnCount = 2;
+            previewSplit.RowCount = 1;
+            previewSplit.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+            previewSplit.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+
+            rtbRequest.Dock = DockStyle.Fill;
             rtbRequest.ReadOnly = true;
-            rtbRequest.Size = new Size(480, 90);
-            rtbRequest.TabIndex = 8;
-            rtbRequest.Text = "";
-            // 
-            // rtbResponse
-            // 
-            rtbResponse.Location = new Point(500, 505);
-            rtbResponse.Name = "rtbResponse";
+            rtbRequest.Font = new Font("Consolas", 9F);
+            rtbRequest.Name = "rtbRequest";
+
+            rtbResponse.Dock = DockStyle.Fill;
             rtbResponse.ReadOnly = true;
-            rtbResponse.Size = new Size(480, 180);
-            rtbResponse.TabIndex = 9;
-            rtbResponse.Text = "";
-            // 
-            // lblStatus
-            // 
-            lblStatus.Location = new Point(12, 688);
-            lblStatus.Name = "lblStatus";
-            lblStatus.Size = new Size(400, 20);
-            lblStatus.TabIndex = 10;
+            rtbResponse.Font = new Font("Consolas", 9F);
+            rtbResponse.Name = "rtbResponse";
+
+            previewSplit.Controls.Add(rtbRequest, 0, 0);
+            previewSplit.Controls.Add(rtbResponse, 1, 0);
+
+            // Status bar (below everything) - placed inside rightLayout first row? we'll add labels under preview
+            var statusPanel = new FlowLayoutPanel();
+            statusPanel.Dock = DockStyle.Bottom;
+            statusPanel.Height = 24;
+            statusPanel.FlowDirection = FlowDirection.LeftToRight;
+
+            lblStatus.AutoSize = true;
             lblStatus.Text = "状态: 未执行";
-            // 
-            // lblDuration
-            // 
-            lblDuration.Location = new Point(420, 688);
-            lblDuration.Name = "lblDuration";
-            lblDuration.Size = new Size(200, 20);
-            lblDuration.TabIndex = 11;
+            lblStatus.Name = "lblStatus";
+
+            lblDuration.AutoSize = true;
             lblDuration.Text = "耗时: -";
-            // 
-            // Form1
-            // 
-            AutoScaleDimensions = new SizeF(11F, 24F);
-            AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(1000, 700);
-            Controls.Add(txtBaseUrl);
-            Controls.Add(btnParseTemplates);
-            Controls.Add(btnSendRequest);
-            Controls.Add(txtRequestTemplate);
-            Controls.Add(txtResponseTemplate);
-            Controls.Add(txtSuccessCriteria);
-            Controls.Add(dgvRequestVariables);
-            Controls.Add(dgvResponseVariables);
-            Controls.Add(rtbRequest);
-            Controls.Add(rtbResponse);
-            Controls.Add(lblStatus);
-            Controls.Add(lblDuration);
-            Name = "Form1";
-            Text = "PLC-MES HTTP 测试工具";
-            ((System.ComponentModel.ISupportInitialize)dgvRequestVariables).EndInit();
-            ((System.ComponentModel.ISupportInitialize)dgvResponseVariables).EndInit();
-            ResumeLayout(false);
-            PerformLayout();
+            lblDuration.Name = "lblDuration";
+
+            statusPanel.Controls.Add(lblStatus);
+            statusPanel.Controls.Add(lblDuration);
+
+            // Assemble right layout
+            rightLayout.Controls.Add(topPanel, 0, 0);
+            rightLayout.Controls.Add(dgvRequestVariables, 0, 1);
+            rightLayout.Controls.Add(dgvResponseVariables, 0, 2);
+            rightLayout.Controls.Add(previewSplit, 0, 3);
+
+            // Add left and right to main layout
+            mainLayout.Controls.Add(leftLayout, 0, 0);
+            mainLayout.Controls.Add(rightLayout, 1, 0);
+
+            // Add mainLayout and statusPanel to form
+            this.Controls.Add(mainLayout);
+            this.Controls.Add(statusPanel);
+
+            this.ResumeLayout(false);
+            this.PerformLayout();
         }
 
         #endregion

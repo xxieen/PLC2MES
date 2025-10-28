@@ -11,15 +11,25 @@ namespace PLC2MES.Core.Parsers
     {
         public HttpRequestTemplate Parse(string templateText)
         {
-            if (string.IsNullOrWhiteSpace(templateText)) throw new ArgumentException("模板文本不能为空");
-            StringHelper.ResetIdCounter();
-            var template = new HttpRequestTemplate { OriginalText = templateText };
-            string[] parts = SplitHeaderAndBody(templateText);
-            string headerSection = parts[0];
-            string bodySection = parts.Length > 1 ? parts[1] : string.Empty;
-            ParseHeaderSection(headerSection, template);
-            if (!string.IsNullOrWhiteSpace(bodySection)) ParseBodySection(bodySection, template);
-            return template;
+            Logger.LogInfo("RequestTemplateParser: Parse called");
+            try
+            {
+                if (string.IsNullOrWhiteSpace(templateText)) throw new ArgumentException("模板文本不能为空");
+                StringHelper.ResetIdCounter();
+                var template = new HttpRequestTemplate { OriginalText = templateText };
+                string[] parts = SplitHeaderAndBody(templateText);
+                string headerSection = parts[0];
+                string bodySection = parts.Length > 1 ? parts[1] : string.Empty;
+                ParseHeaderSection(headerSection, template);
+                if (!string.IsNullOrWhiteSpace(bodySection)) ParseBodySection(bodySection, template);
+                Logger.LogInfo($"RequestTemplateParser: Parse finished, expressions={template.Expressions.Count}");
+                return template;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError("RequestTemplateParser: Parse failed", ex);
+                throw;
+            }
         }
 
         private string[] SplitHeaderAndBody(string text)

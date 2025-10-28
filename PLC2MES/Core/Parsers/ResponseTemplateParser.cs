@@ -19,14 +19,24 @@ namespace PLC2MES.Core.Parsers
 
         public HttpResponseTemplate Parse(string templateText)
         {
-            if (string.IsNullOrWhiteSpace(templateText)) throw new ArgumentException("响应模板文本不能为空");
-            var template = new HttpResponseTemplate { OriginalText = templateText };
-            string[] parts = SplitHeaderAndBody(templateText);
-            string headerSection = parts[0];
-            string bodySection = parts.Length > 1 ? parts[1] : string.Empty;
-            ParseHeaderSection(headerSection, template);
-            if (!string.IsNullOrWhiteSpace(bodySection)) ParseBodySection(bodySection, template);
-            return template;
+            Logger.LogInfo("ResponseTemplateParser: Parse called");
+            try
+            {
+                if (string.IsNullOrWhiteSpace(templateText)) throw new ArgumentException("响应模板文本不能为空");
+                var template = new HttpResponseTemplate { OriginalText = templateText };
+                string[] parts = SplitHeaderAndBody(templateText);
+                string headerSection = parts[0];
+                string bodySection = parts.Length > 1 ? parts[1] : string.Empty;
+                ParseHeaderSection(headerSection, template);
+                if (!string.IsNullOrWhiteSpace(bodySection)) ParseBodySection(bodySection, template);
+                Logger.LogInfo($"ResponseTemplateParser: Parse finished, mappings={template.Mappings.Count}");
+                return template;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError("ResponseTemplateParser: Parse failed", ex);
+                throw;
+            }
         }
 
         private string[] SplitHeaderAndBody(string text)
@@ -83,23 +93,31 @@ namespace PLC2MES.Core.Parsers
                 var node = _jsonProcessor.ParseJson(processed);
                 _jsonProcessor.TraverseJson(node, "", (path, value) =>
                 {
-                    if (value is string s && StringHelper.IsPlaceholder(s))
+                    try
                     {
-                        var id = StringHelper.ExtractIdFromPlaceholder(s);
-                        if (id != null)
+                        if (value is string s && StringHelper.IsPlaceholder(s))
                         {
-                            var expression = expressions.Find(e => e.Id == id);
-                            if (expression != null)
+                            var id = StringHelper.ExtractIdFromPlaceholder(s);
+                            if (id != null)
                             {
-                                var mapping = new ResponseMapping { Id = id, JsonPointer = path, VariableName = expression.VariableName, DataType = expression.DataType.Value };
-                                template.Mappings.Add(mapping);
+                                var expression = expressions.Find(e => e.Id == id);
+                                if (expression != null)
+                                {
+                                    var mapping = new ResponseMapping { Id = id, JsonPointer = path, VariableName = expression.VariableName, DataType = expression.DataType.Value };
+                                    template.Mappings.Add(mapping);
+                                }
                             }
                         }
+                    }
+                    catch (Exception exInner)
+                    {
+                        Logger.LogError($"ResponseTemplateParser: error while traversing json path={path}", exInner);
                     }
                 });
             }
             catch (Exception ex)
             {
+                Logger.LogError("ResponseTemplateParser: ParseBodySection failed", ex);
                 throw new Exception($"响应Body JSON解析失败: {ex.Message}");
             }
         }
