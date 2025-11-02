@@ -10,6 +10,10 @@ namespace PLC2MES.Core.Models
         public string FormatString { get; set; }
         public VariableSource Source { get; set; }
 
+        // User-configurable default value (used when extraction fails)
+        public bool HasUserDefault { get; private set; }
+        public object UserDefaultValue { get; private set; }
+
         public Variable() { }
 
         public Variable(string name, VariableType type, VariableSource source, string formatString = null)
@@ -19,6 +23,8 @@ namespace PLC2MES.Core.Models
             Source = source;
             FormatString = formatString;
             Value = GetDefaultValue(type);
+            HasUserDefault = false;
+            UserDefaultValue = null;
         }
 
         private object GetDefaultValue(VariableType type)
@@ -88,6 +94,56 @@ namespace PLC2MES.Core.Models
             {
                 return false;
             }
+        }
+
+        // Set user-configured default from string. Returns true if parsed successfully.
+        public bool SetUserDefaultFromString(string valueString)
+        {
+            try
+            {
+                object parsed = null;
+                switch (Type)
+                {
+                    case VariableType.Bool:
+                        parsed = bool.Parse(valueString);
+                        break;
+                    case VariableType.Int:
+                        parsed = int.Parse(valueString);
+                        break;
+                    case VariableType.Float:
+                        parsed = double.Parse(valueString);
+                        break;
+                    case VariableType.String:
+                        parsed = valueString;
+                        break;
+                    case VariableType.DateTime:
+                        parsed = DateTime.Parse(valueString);
+                        break;
+                    default:
+                        return false;
+                }
+                HasUserDefault = true;
+                UserDefaultValue = parsed;
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        // Clear user-configured default
+        public void ClearUserDefault()
+        {
+            HasUserDefault = false;
+            UserDefaultValue = null;
+        }
+
+        // Get effective default (user default if set, otherwise type default)
+        public object GetEffectiveDefault()
+        {
+            if (HasUserDefault) return UserDefaultValue;
+            return GetDefaultValue(Type);
         }
 
         public override string ToString()

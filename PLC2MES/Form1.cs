@@ -1,14 +1,21 @@
 ﻿using System;
 using System.Linq;
 using System.Windows.Forms;
+using System.IO;
+using System.Collections.Generic;
+using System.Text.Json;
 using PLC2MES.Core.Services;
 using PLC2MES.Core.Models;
+using PLC2MES.Utils;
 
 namespace PLC2MES
 {
     public partial class Form1 : Form
     {
         private HttpTestService _service;
+        private readonly string _userDefaultsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "user_defaults.json");
+        private Dictionary<string, string> _userDefaults = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
         public Form1()
         {
             InitializeComponent();
@@ -22,9 +29,47 @@ namespace PLC2MES
             btnSendRequest.Click += BtnSendRequest_Click;
             InitializeGrids();
 
+            LoadUserDefaults();
+
             // keyboard shortcuts
             this.KeyPreview = true;
             this.KeyDown += Form1_KeyDown;
+            this.FormClosing += Form1_FormClosing;
+        }
+
+        private void LoadUserDefaults()
+        {
+            try
+            {
+                if (File.Exists(_userDefaultsPath))
+                {
+                    var txt = File.ReadAllText(_userDefaultsPath);
+                    var dict = JsonSerializer.Deserialize<Dictionary<string, string>>(txt);
+                    if (dict != null) _userDefaults = new Dictionary<string, string>(dict, StringComparer.OrdinalIgnoreCase);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError("Failed to load user defaults", ex);
+            }
+        }
+
+        private void SaveUserDefaults()
+        {
+            try
+            {
+                var txt = JsonSerializer.Serialize(_userDefaults);
+                File.WriteAllText(_userDefaultsPath, txt);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError("Failed to save user defaults", ex);
+            }
+        }
+
+        private void Form1_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            SaveUserDefaults();
         }
 
         private void InitializeGrids()
@@ -39,21 +84,25 @@ namespace PLC2MES
             dgvRequestVariables.Columns.Add("VariableType", "类型");
             dgvRequestVariables.Columns.Add("VariableValue", "值");
             dgvRequestVariables.Columns.Add("FormatString", "格式");
+            dgvRequestVariables.Columns.Add("UserDefault", "用户默认");
 
             dgvResponseVariables.Columns.Clear();
             dgvResponseVariables.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
             dgvResponseVariables.AllowUserToAddRows = false;
             dgvResponseVariables.AllowUserToDeleteRows = false;
             dgvResponseVariables.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-            dgvResponseVariables.ReadOnly = true;
+            dgvResponseVariables.ReadOnly = false; // allow editing default
 
             dgvResponseVariables.Columns.Add("VariableName", "变量名");
             dgvResponseVariables.Columns.Add("VariableType", "类型");
             dgvResponseVariables.Columns.Add("VariableValue", "值");
             dgvResponseVariables.Columns.Add("JsonPath", "JSON路径");
+            dgvResponseVariables.Columns.Add("UserDefault", "用户默认");
 
             dgvRequestVariables.CellValueChanged += DgvRequestVariables_CellValueChanged;
             dgvRequestVariables.CurrentCellDirtyStateChanged += DgvRequestVariables_CurrentCellDirtyStateChanged;
+            dgvResponseVariables.CellValueChanged += DgvResponseVariables_CellValueChanged;
+            dgvResponseVariables.CurrentCellDirtyStateChanged += DgvRequestVariables_CurrentCellDirtyStateChanged;
         }
 
         private void DgvRequestVariables_CurrentCellDirtyStateChanged(object sender, EventArgs e)
@@ -62,6 +111,10 @@ namespace PLC2MES
             if (dgvRequestVariables.IsCurrentCellDirty)
             {
                 dgvRequestVariables.CommitEdit(DataGridViewDataErrorContexts.Commit);
+            }
+            if (dgvResponseVariables.IsCurrentCellDirty)
+            {
+                dgvResponseVariables.CommitEdit(DataGridViewDataErrorContexts.Commit);
             }
         }
 
@@ -90,13 +143,22 @@ namespace PLC2MES
             dgvRequestVariables.Rows.Clear();
             foreach (var v in vm.GetRequestVariables())
             {
-                var idx = dgvRequestVariables.Rows.Add(v.Name, v.Type.ToString(), v.Value?.ToString() ?? "", v.FormatString ?? "");
+                // apply persisted user default if exists and not already set by user
+                if (!v.HasUserDefault && _userDefaults.TryGetValue(v.Name, out var ud))
+                {
+                    v.SetUserDefaultFromString(ud);
+                }
+                var idx = dgvRequestVariables.Rows.Add(v.Name, v.Type.ToString(), v.Value?.ToString() ?? "", v.FormatString ?? "", v.HasUserDefault ? v.UserDefaultValue?.ToString() : "");
                 dgvRequestVariables.Rows[idx].Tag = v;
             }
             dgvResponseVariables.Rows.Clear();
             foreach (var v in vm.GetResponseVariables())
             {
-                var idx = dgvResponseVariables.Rows.Add(v.Name, v.Type.ToString(), v.Value?.ToString() ?? "", "");
+                if (!v.HasUserDefault && _userDefaults.TryGetValue(v.Name, out var ud))
+                {
+                    v.SetUserDefaultFromString(ud);
+                }
+                var idx = dgvResponseVariables.Rows.Add(v.Name, v.Type.ToString(), v.Value?.ToString() ?? "", "", v.HasUserDefault ? v.UserDefaultValue?.ToString() : "");
                 dgvResponseVariables.Rows[idx].Tag = v;
             }
         }
@@ -128,18 +190,96 @@ namespace PLC2MES
         private void DgvRequestVariables_CellValueChanged(object sender, DataGridViewCellEventArgs e)
         {
             if (e.RowIndex <0 || e.ColumnIndex <0) return;
-            if (dgvRequestVariables.Columns[e.ColumnIndex].Name != "VariableValue") return;
+            var colName = dgvRequestVariables.Columns[e.ColumnIndex].Name;
             try
             {
                 DataGridViewRow row = dgvRequestVariables.Rows[e.RowIndex];
                 Variable variable = row.Tag as Variable;
                 if (variable == null) return;
-                string newValue = row.Cells["VariableValue"].Value?.ToString();
-                if (string.IsNullOrWhiteSpace(newValue)) return;
-                if (!variable.TrySetValue(newValue))
+                if (colName == "VariableValue")
                 {
-                    MessageBox.Show($"值 '{newValue}' 无法转换为类型 {variable.Type}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                    row.Cells["VariableValue"].Value = variable.GetFormattedValue();
+                    string newValue = row.Cells["VariableValue"].Value?.ToString();
+                    if (string.IsNullOrWhiteSpace(newValue)) return;
+                    if (!variable.TrySetValue(newValue))
+                    {
+                        MessageBox.Show($"值 '{newValue}' 无法转换为类型 {variable.Type}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        row.Cells["VariableValue"].Value = variable.GetFormattedValue();
+                    }
+                }
+                else if (colName == "UserDefault")
+                {
+                    string def = row.Cells["UserDefault"].Value?.ToString();
+                    if (string.IsNullOrWhiteSpace(def))
+                    {
+                        // clear user default
+                        variable.ClearUserDefault();
+                        _userDefaults.Remove(variable.Name);
+                        SaveUserDefaults();
+                    }
+                    else
+                    {
+                        if (!variable.SetUserDefaultFromString(def))
+                        {
+                            MessageBox.Show($"默认值 '{def}' 无法转换为类型 {variable.Type}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            row.Cells["UserDefault"].Value = variable.HasUserDefault ? variable.UserDefaultValue?.ToString() : string.Empty;
+                        }
+                        else
+                        {
+                            // persist
+                            _userDefaults[variable.Name] = def;
+                            SaveUserDefaults();
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"设置变量值时发生错误: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void DgvResponseVariables_CellValueChanged(object sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex <0 || e.ColumnIndex <0) return;
+            var colName = dgvResponseVariables.Columns[e.ColumnIndex].Name;
+            try
+            {
+                DataGridViewRow row = dgvResponseVariables.Rows[e.RowIndex];
+                Variable variable = row.Tag as Variable;
+                if (variable == null) return;
+                if (colName == "VariableValue")
+                {
+                    string newValue = row.Cells["VariableValue"].Value?.ToString();
+                    if (string.IsNullOrWhiteSpace(newValue)) return;
+                    if (!variable.TrySetValue(newValue))
+                    {
+                        MessageBox.Show($"值 '{newValue}' 无法转换为类型 {variable.Type}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        row.Cells["VariableValue"].Value = variable.GetFormattedValue();
+                    }
+                }
+                else if (colName == "UserDefault")
+                {
+                    string def = row.Cells["UserDefault"].Value?.ToString();
+                    if (string.IsNullOrWhiteSpace(def))
+                    {
+                        // clear user default
+                        variable.ClearUserDefault();
+                        _userDefaults.Remove(variable.Name);
+                        SaveUserDefaults();
+                    }
+                    else
+                    {
+                        if (!variable.SetUserDefaultFromString(def))
+                        {
+                            MessageBox.Show($"默认值 '{def}' 无法转换为类型 {variable.Type}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            row.Cells["UserDefault"].Value = variable.HasUserDefault ? variable.UserDefaultValue?.ToString() : string.Empty;
+                        }
+                        else
+                        {
+                            _userDefaults[variable.Name] = def;
+                            SaveUserDefaults();
+                        }
+                    }
                 }
             }
             catch (Exception ex)

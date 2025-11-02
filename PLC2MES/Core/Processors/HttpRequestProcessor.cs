@@ -132,7 +132,14 @@ namespace PLC2MES.Core.Processors
                     response.StatusCode = (int)webResp.StatusCode;
                     response.StatusMessage = webResp.StatusDescription;
                     response.IsSuccess = true;
-                    foreach (string key in webResp.Headers.AllKeys) response.Headers[key] = webResp.Headers[key];
+                    foreach (string key in webResp.Headers.AllKeys)
+                    {
+                        var vals = webResp.Headers.GetValues(key);
+                        if (vals != null)
+                            response.Headers[key] = new List<string>(vals);
+                        else
+                            response.Headers[key] = new List<string> { webResp.Headers[key] ?? string.Empty };
+                    }
                     using (var reader = new StreamReader(webResp.GetResponseStream(), Encoding.UTF8)) response.Body = await reader.ReadToEndAsync();
                     Logger.LogInfo($"HttpRequestProcessor: Received response status={response.StatusCode}");
                 }

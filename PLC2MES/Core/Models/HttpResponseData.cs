@@ -6,14 +6,14 @@ namespace PLC2MES.Core.Models
     {
         public int StatusCode { get; set; }
         public string StatusMessage { get; set; }
-        public Dictionary<string, string> Headers { get; set; }
+        public Dictionary<string, List<string>> Headers { get; set; }
         public string Body { get; set; }
         public bool IsSuccess { get; set; }
         public string ErrorMessage { get; set; }
 
         public HttpResponseData()
         {
-            Headers = new Dictionary<string, string>();
+            Headers = new Dictionary<string, List<string>>();
         }
     }
 }
