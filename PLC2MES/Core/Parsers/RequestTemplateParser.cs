@@ -2,6 +2,7 @@ using System;
 using System.Text;
 using System.Text.RegularExpressions;
 using PLC2MES.Core.Models;
+using PLC2MES.Core.Services;
 using PLC2MES.Utils;
 using System.Collections.Generic;
 
@@ -9,27 +10,22 @@ namespace PLC2MES.Core.Parsers
 {
     public class RequestTemplateParser
     {
+        private readonly IVariableManager _vars;
+        public RequestTemplateParser(IVariableManager vars) { _vars = vars ?? throw new ArgumentNullException(nameof(vars)); }
+
         public HttpRequestTemplate Parse(string templateText)
         {
             Logger.LogInfo("RequestTemplateParser: Parse called");
-            try
-            {
-                if (string.IsNullOrWhiteSpace(templateText)) throw new ArgumentException("模板文本不能为空");
-                StringHelper.ResetIdCounter();
-                var template = new HttpRequestTemplate { OriginalText = templateText };
-                string[] parts = SplitHeaderAndBody(templateText);
-                string headerSection = parts[0];
-                string bodySection = parts.Length > 1 ? parts[1] : string.Empty;
-                ParseHeaderSection(headerSection, template);
-                if (!string.IsNullOrWhiteSpace(bodySection)) ParseBodySection(bodySection, template);
-                Logger.LogInfo($"RequestTemplateParser: Parse finished, expressions={template.Expressions.Count}");
-                return template;
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError("RequestTemplateParser: Parse failed", ex);
-                throw;
-            }
+            if (string.IsNullOrWhiteSpace(templateText)) throw new ArgumentException("模板文本不能为空");
+            StringHelper.ResetIdCounter();
+            var template = new HttpRequestTemplate { OriginalText = templateText };
+            string[] parts = SplitHeaderAndBody(templateText);
+            string headerSection = parts[0];
+            string bodySection = parts.Length > 1 ? parts[1] : string.Empty;
+            ParseHeaderSection(headerSection, template);
+            if (!string.IsNullOrWhiteSpace(bodySection)) ParseBodySection(bodySection, template);
+            Logger.LogInfo($"RequestTemplateParser: Parse finished, expressions={template.Expressions.Count}");
+            return template;
         }
 
         private string[] SplitHeaderAndBody(string text)
@@ -63,12 +59,15 @@ namespace PLC2MES.Core.Parsers
 
         private string ProcessUrlVariables(string url, HttpRequestTemplate template)
         {
-            return Regex.Replace(url, RegexPatterns.UrlVariable, match =>
+            var varRegex = new Regex(RegexPatterns.Variable, RegexOptions.Compiled);
+            return varRegex.Replace(url, match =>
             {
-                string varName = match.Groups[1].Value;
-                string format = match.Groups[2].Success ? match.Groups[2].Value : null;
+                string varName = match.Groups["var"].Value;
+                string format = match.Groups["format"].Success ? match.Groups["format"].Value : null;
                 var expression = new TemplateExpression { Id = StringHelper.GenerateUniqueId(), VariableName = varName, DataType = null, FormatString = format, OriginalText = match.Value, Location = ExpressionLocation.Url };
                 template.Expressions.Add(expression);
+                // register variable as string for URL
+                _vars.RegisterVariable(new Variable(varName, VariableType.String, VariableSource.Request, format));
                 return match.Value;
             });
         }
@@ -84,11 +83,14 @@ namespace PLC2MES.Core.Parsers
 
         private string ProcessHeaderVariables(string headerValue, HttpRequestTemplate template)
         {
-            return Regex.Replace(headerValue, RegexPatterns.HeaderVariable, match =>
+            var varRegex = new Regex(RegexPatterns.Variable, RegexOptions.Compiled);
+            return varRegex.Replace(headerValue, match =>
             {
-                string varName = match.Groups[1].Value; string format = match.Groups[2].Success ? match.Groups[2].Value : null;
+                string varName = match.Groups["var"].Value;
+                string format = match.Groups["format"].Success ? match.Groups["format"].Value : null;
                 var expression = new TemplateExpression { Id = StringHelper.GenerateUniqueId(), VariableName = varName, DataType = null, FormatString = format, OriginalText = match.Value, Location = ExpressionLocation.Header };
                 template.Expressions.Add(expression);
+                _vars.RegisterVariable(new Variable(varName, VariableType.String, VariableSource.Request, format));
                 return match.Value;
             });
         }
@@ -101,12 +103,16 @@ namespace PLC2MES.Core.Parsers
 
         private string ProcessBodyVariables(string body, HttpRequestTemplate template)
         {
-            return Regex.Replace(body, RegexPatterns.BodyVariable, match =>
+            var varRegex = new Regex(RegexPatterns.Variable, RegexOptions.Compiled);
+            return varRegex.Replace(body, match =>
             {
-                string typeStr = match.Groups[1].Value; string varName = match.Groups[2].Value; string format = match.Groups[3].Success ? match.Groups[3].Value : null;
-                VariableType varType = ParseVariableType(typeStr);
+                string typeStr = match.Groups["type"].Success ? match.Groups["type"].Value : null;
+                string varName = match.Groups["var"].Value;
+                string format = match.Groups["format"].Success ? match.Groups["format"].Value : null;
+                VariableType varType = string.IsNullOrEmpty(typeStr) ? VariableType.String : ParseVariableType(typeStr);
                 var expression = new TemplateExpression { Id = StringHelper.GenerateUniqueId(), VariableName = varName, DataType = varType, FormatString = format, OriginalText = match.Value, Location = ExpressionLocation.Body };
                 template.Expressions.Add(expression);
+                _vars.RegisterVariable(new Variable(varName, varType, VariableSource.Request, format));
                 // Return quoted placeholder so the JSON remains valid
                 return "\"" + StringHelper.CreatePlaceholder(expression.Id) + "\"";
             });

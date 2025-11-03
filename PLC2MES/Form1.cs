@@ -24,7 +24,14 @@ namespace PLC2MES
 
         private void InitializeApp()
         {
-            _service = new HttpTestService();
+            // create a VariableManager and pass into service (no parameterless constructors)
+            var vm = new VariableManager();
+            _service = new HttpTestService(vm);
+
+            // subscribe to variable manager events to auto-refresh response variables
+            vm.VariableChanged += Vm_VariableChanged;
+            vm.VariableRegistered += Vm_VariableRegistered;
+
             btnParseTemplates.Click += BtnParseTemplates_Click;
             btnSendRequest.Click += BtnSendRequest_Click;
             InitializeGrids();
@@ -35,6 +42,97 @@ namespace PLC2MES
             this.KeyPreview = true;
             this.KeyDown += Form1_KeyDown;
             this.FormClosing += Form1_FormClosing;
+        }
+
+        private void Vm_VariableRegistered(object sender, string varName)
+        {
+            // add new response variable row if needed
+            try
+            {
+                var vm = _service.GetVariableManager();
+                var v = vm.GetVariable(varName);
+                if (v == null) return;
+                if (v.Source != VariableSource.Response) return;
+
+                if (InvokeRequired)
+                {
+                    BeginInvoke(new Action(() => EnsureResponseRow(v)));
+                    return;
+                }
+
+                EnsureResponseRow(v);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError("Error handling VariableRegistered", ex);
+            }
+        }
+
+        private void Vm_VariableChanged(object sender, VariableChangedEventArgs e)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(e?.Name)) return;
+                var vm = _service.GetVariableManager();
+                var v = vm.GetVariable(e.Name);
+                if (v == null) return;
+                if (v.Source != VariableSource.Response) return;
+
+                if (InvokeRequired)
+                {
+                    BeginInvoke(new Action(() => UpdateResponseRowValue(v)));
+                    return;
+                }
+
+                UpdateResponseRowValue(v);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError("Error handling VariableChanged", ex);
+            }
+        }
+
+        private void EnsureResponseRow(Variable v)
+        {
+            // find existing row by variable name
+            foreach (DataGridViewRow row in dgvResponseVariables.Rows)
+            {
+                if (row.Tag is Variable existing && string.Equals(existing.Name, v.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    // update tag and cells
+                    row.Tag = v;
+                    row.Cells["VariableType"].Value = v.Type.ToString();
+                    row.Cells["VariableValue"].Value = v.GetFormattedValue();
+                    return;
+                }
+            }
+
+            // not found -> add
+            int idx = dgvResponseVariables.Rows.Add(v.Name, v.Type.ToString(), v.GetFormattedValue(), "", v.HasUserDefault ? v.UserDefaultValue?.ToString() : "");
+            dgvResponseVariables.Rows[idx].Tag = v;
+        }
+
+        private void UpdateResponseRowValue(Variable v)
+        {
+            foreach (DataGridViewRow row in dgvResponseVariables.Rows)
+            {
+                if (row.Tag is Variable existing && string.Equals(existing.Name, v.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    // avoid overwriting user-edited cell if it currently has focus
+                    if (dgvResponseVariables.CurrentCell != null && dgvResponseVariables.CurrentCell.OwningRow == row && dgvResponseVariables.CurrentCell.OwningColumn.Name == "VariableValue")
+                    {
+                        // user is editing this cell — skip update
+                        return;
+                    }
+
+                    row.Tag = v;
+                    row.Cells["VariableValue"].Value = v.GetFormattedValue();
+                    return;
+                }
+            }
+
+            // if not found, add new row
+            EnsureResponseRow(v);
         }
 
         private void LoadUserDefaults()

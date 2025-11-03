@@ -5,6 +5,7 @@ using System.Net;
 using System.Text;
 using System.Threading.Tasks;
 using PLC2MES.Core.Models;
+using PLC2MES.Core.Services;
 using PLC2MES.Utils;
 
 namespace PLC2MES.Core.Processors
@@ -12,13 +13,20 @@ namespace PLC2MES.Core.Processors
     public class HttpRequestProcessor
     {
         private JsonProcessor _jsonProcessor;
-        public HttpRequestProcessor() { _jsonProcessor = new JsonProcessor(); }
+        private readonly IVariableManager _vars;
 
-        public string BuildRequest(HttpRequestTemplate template, Dictionary<string, Variable> variables)
+        public HttpRequestProcessor(IVariableManager vars)
+        {
+            _jsonProcessor = new JsonProcessor();
+            _vars = vars ?? throw new ArgumentNullException(nameof(vars));
+        }
+
+        public string BuildRequest(HttpRequestTemplate template)
         {
             Logger.LogInfo("HttpRequestProcessor: BuildRequest called");
             try
             {
+                var variables = _vars.GetAllVariables();
                 var sb = new StringBuilder();
                 string processedUrl = ProcessUrl(template.Url, template.Expressions, variables);
                 sb.AppendLine($"{template.Method} {processedUrl}");

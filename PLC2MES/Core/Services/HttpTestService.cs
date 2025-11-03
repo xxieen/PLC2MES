@@ -11,24 +11,24 @@ namespace PLC2MES.Core.Services
     public class HttpTestService
     {
         private RequestTemplateParser _requestParser;
-        private ResponseTemplateParser _responseParser;
-        private SuccessCriteriaParser _criteriaParser;
+        private ResponseTemplateParser _response_parser;
+        private SuccessCriteriaParser _criteria_parser;
         private HttpRequestProcessor _requestProcessor;
         private HttpResponseProcessor _responseProcessor;
-        private VariableManager _variableManager;
+        private IVariableManager _variableManager;
         private HttpRequestTemplate _requestTemplate;
-        private HttpResponseTemplate _responseTemplate;
+        private HttpResponseTemplate _response_template;
         private ConditionNode _successCriteria;
         private string _baseUrl;
 
-        public HttpTestService()
+        public HttpTestService(IVariableManager manager)
         {
-            _requestParser = new RequestTemplateParser();
-            _responseParser = new ResponseTemplateParser();
-            _criteriaParser = new SuccessCriteriaParser();
-            _requestProcessor = new HttpRequestProcessor();
-            _responseProcessor = new HttpResponseProcessor();
-            _variableManager = new VariableManager();
+            _variableManager = manager ?? throw new ArgumentNullException(nameof(manager));
+            _requestParser = new RequestTemplateParser(_variableManager);
+            _response_parser = new ResponseTemplateParser(_variableManager);
+            _criteria_parser = new SuccessCriteriaParser();
+            _requestProcessor = new HttpRequestProcessor(_variableManager);
+            _responseProcessor = new HttpResponseProcessor(_variableManager);
         }
 
         public void SetBaseUrl(string baseUrl) { _baseUrl = baseUrl; }
@@ -36,37 +36,26 @@ namespace PLC2MES.Core.Services
         public void LoadRequestTemplate(string templateText)
         {
             _requestTemplate = _requestParser.Parse(templateText);
-            foreach (var exp in _requestTemplate.Expressions)
-            {
-                var varType = exp.DataType ?? VariableType.String;
-                var variable = new Variable(exp.VariableName, varType, VariableSource.Request, exp.FormatString);
-                _variableManager.RegisterVariable(variable);
-            }
         }
 
         public void LoadResponseTemplate(string templateText)
         {
-            _responseTemplate = _responseParser.Parse(templateText);
-            foreach (var mapping in _responseTemplate.Mappings)
-            {
-                var variable = new Variable(mapping.VariableName, mapping.DataType, VariableSource.Response);
-                _variableManager.RegisterVariable(variable);
-            }
+            _response_template = _response_parser.Parse(templateText);
         }
 
         public void LoadSuccessCriteria(string expression)
         {
             if (string.IsNullOrWhiteSpace(expression)) { _successCriteria = null; return; }
-            _successCriteria = _criteriaParser.Parse(expression);
+            _successCriteria = _criteria_parser.Parse(expression);
         }
 
-        public VariableManager GetVariableManager() => _variableManager;
+        public IVariableManager GetVariableManager() => _variableManager;
 
         public ValidationResult ValidateBeforeExecution()
         {
             var r = new ValidationResult { IsValid = true };
             if (_requestTemplate == null) { r.IsValid = false; r.ErrorMessages.Add("未加载请求模板"); }
-            if (_responseTemplate == null) { r.IsValid = false; r.ErrorMessages.Add("未加载响应模板"); }
+            if (_response_template == null) { r.IsValid = false; r.ErrorMessages.Add("未加载响应模板"); }
             if (string.IsNullOrWhiteSpace(_baseUrl)) { r.IsValid = false; r.ErrorMessages.Add("未设置基础URL"); }
             if (!_variableManager.AreAllRequestVariablesSet()) { r.IsValid = false; r.ErrorMessages.Add("存在未赋值的请求变量"); }
             return r;
@@ -80,13 +69,13 @@ namespace PLC2MES.Core.Services
             {
                 var valid = ValidateBeforeExecution();
                 if (!valid.IsValid) { result.Success = false; result.ErrorMessage = valid.GetErrorMessage(); return result; }
-                string requestText = _requestProcessor.BuildRequest(_requestTemplate, _variableManager.GetAllVariables());
+                string requestText = _requestProcessor.BuildRequest(_requestTemplate);
                 result.RequestText = requestText;
                 var response = await _requestProcessor.SendRequestAsync(_baseUrl, _requestTemplate.Method, ExtractPath(_requestTemplate.Url), _requestTemplate.Headers, ExtractBody(requestText));
                 result.StatusCode = response.StatusCode;
                 result.ResponseText = _responseProcessor.FormatResponse(response);
                 if (!response.IsSuccess) { result.Success = false; result.ErrorMessage = response.ErrorMessage; sw.Stop(); result.DurationMs = sw.ElapsedMilliseconds; return result; }
-                _responseProcessor.ProcessResponse(response, _responseTemplate, _variableManager.GetAllVariables());
+                _responseProcessor.ProcessResponse(response, _response_template);
                 result.ExtractedVariables = new Dictionary<string, Variable>(_variableManager.GetAllVariables());
                 if (_successCriteria != null) { bool cr = _successCriteria.Evaluate(_variableManager.GetAllVariables()); result.SuccessCriteriaResult = cr; result.SuccessCriteriaDetail = BuildCriteriaDetail(cr); result.Success = cr; }
                 else { result.Success = response.StatusCode >= 200 && response.StatusCode < 300; }
@@ -113,7 +102,7 @@ namespace PLC2MES.Core.Services
         public void Reset()
         {
             _requestTemplate = null;
-            _responseTemplate = null;
+            _response_template = null;
             _successCriteria = null;
             _variableManager.Clear();
         }

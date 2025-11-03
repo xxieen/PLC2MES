@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using PLC2MES.Core.Models;
+using PLC2MES.Core.Services;
 using PLC2MES.Utils;
 
 namespace PLC2MES.Core.Processors
@@ -10,166 +11,206 @@ namespace PLC2MES.Core.Processors
     public class HttpResponseProcessor
     {
         private JsonProcessor _jsonProcessor;
-        public HttpResponseProcessor() { _jsonProcessor = new JsonProcessor(); }
-
-        public void ProcessResponse(HttpResponseData response, HttpResponseTemplate template, Dictionary<string, Variable> variables)
+        private readonly IVariableManager _vars;
+        public HttpResponseProcessor(IVariableManager vars)
         {
-            Logger.LogInfo($"HttpResponseProcessor: ProcessResponse called, status={response?.StatusCode}");
+            _jsonProcessor = new JsonProcessor();
+            _vars = vars ?? throw new ArgumentNullException(nameof(vars));
+        }
+
+        public void ProcessResponse(HttpResponseData response, HttpResponseTemplate template)
+        {
             if (response == null || template == null) return;
-            if (!variables.ContainsKey("$StatusCode")) variables["$StatusCode"] = new Variable("$StatusCode", VariableType.Int, VariableSource.Response);
-            variables["$StatusCode"].Value = response.StatusCode;
-            if (string.IsNullOrWhiteSpace(response.Body) && (template.Mappings == null || template.Mappings.Count ==0))
-            {
-                Logger.LogInfo("HttpResponseProcessor: empty response body and no mappings, nothing to extract");
-                return;
-            }
+
+            // ensure manager reference
+            var manager = _vars;
+
             try
             {
-                System.Text.Json.Nodes.JsonNode node = null;
-                if (!string.IsNullOrWhiteSpace(response.Body))
+                ProcessStatusCode(response, manager);
+                ProcessHeaders(response, template, manager);
+                ProcessBody(response, template, manager);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError("HttpResponseProcessor: ProcessResponse failed", ex);
+                // do not rethrow - keep behavior tolerant
+            }
+        }
+
+        private void ProcessStatusCode(HttpResponseData response, IVariableManager manager)
+        {
+            // set or register $StatusCode
+            var existing = manager.GetVariable("$StatusCode");
+            if (existing != null) manager.SetVariableValue("$StatusCode", response.StatusCode);
+            else manager.RegisterVariable(new Variable("$StatusCode", VariableType.Int, VariableSource.Response) { Value = response.StatusCode });
+        }
+
+        private void ProcessHeaders(HttpResponseData response, HttpResponseTemplate template, IVariableManager manager)
+        {
+            if (template?.Mappings == null || template.Mappings.Count ==0) return;
+
+            // group header mappings by header name
+            var headerGroups = template.Mappings
+                .Where(m => !string.IsNullOrWhiteSpace(m.HeaderName))
+                .GroupBy(m => m.HeaderName, StringComparer.OrdinalIgnoreCase);
+
+            foreach (var hg in headerGroups)
+            {
+                string headerName = hg.Key;
+                var mappings = hg.OrderBy(m => m.HeaderGroupIndex).ToList();
+
+                // collect values for this header (may be multiple header lines)
+                var values = new List<string>();
+                if (response.Headers != null)
                 {
-                    node = _jsonProcessor.ParseJson(response.Body);
-                    Logger.LogInfo($"HttpResponseProcessor: parsed JSON, mappings to process={template.Mappings.Count}");
-                }
-                else
-                {
-                    Logger.LogInfo($"HttpResponseProcessor: no body but mappings count={template.Mappings.Count}");
+                    foreach (var kv in response.Headers)
+                    {
+                        if (string.Equals(kv.Key, headerName, StringComparison.OrdinalIgnoreCase) && kv.Value != null)
+                            values.AddRange(kv.Value);
+                    }
                 }
 
-                foreach (var mapping in template.Mappings)
+                if (values.Count ==0)
                 {
-                    try
+                    // no header present -> set defaults
+                    foreach (var m in mappings) SetVariableDefaultValue(m.VariableName, m.DataType, manager);
+                    continue;
+                }
+
+                // try to use mapping.HeaderRegex if provided; otherwise treat whole header value as the extracted value
+                string pattern = mappings.First().HeaderRegex;
+                Regex rx = null;
+                if (!string.IsNullOrWhiteSpace(pattern))
+                {
+                    try { rx = new Regex(pattern, RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Singleline); }
+                    catch (Exception ex) { Logger.LogError($"HttpResponseProcessor: invalid HeaderRegex for header {headerName}", ex); rx = null; }
+                }
+
+                bool anyMatched = false;
+
+                foreach (var hv in values)
+                {
+                    if (rx != null)
                     {
-                        // If mapping targets a header
-                        if (!string.IsNullOrWhiteSpace(mapping.HeaderName))
+                        var match = rx.Match(hv);
+                        if (!match.Success) continue;
+                        anyMatched = true;
+
+                        foreach (var m in mappings)
                         {
-                            Logger.LogInfo($"HttpResponseProcessor: extracting header mapping {mapping.VariableName} from header '{mapping.HeaderName}'");
-                            List<string> headerValues = null;
-                            if (response.Headers != null)
+                            try
                             {
-                                var kv = response.Headers.FirstOrDefault(kvp => string.Equals(kvp.Key, mapping.HeaderName, StringComparison.OrdinalIgnoreCase));
-                                if (!string.IsNullOrEmpty(kv.Key)) headerValues = kv.Value;
-                            }
-                            if (headerValues == null || headerValues.Count ==0)
-                            {
-                                Logger.LogInfo($"HttpResponseProcessor: header '{mapping.HeaderName}' not found, set default for {mapping.VariableName}");
-                                SetVariableDefaultValue(mapping.VariableName, mapping.DataType, variables);
-                            }
-                            else
-                            {
-                                // If a header regex is provided, use it to extract from each header value
-                                if (!string.IsNullOrWhiteSpace(mapping.HeaderRegex) && mapping.HeaderGroupIndex >0)
+                                int gi = m.HeaderGroupIndex <=0 ?1 : m.HeaderGroupIndex;
+                                string captured = (gi < match.Groups.Count) ? match.Groups[gi].Value?.Trim() : null;
+                                if (string.IsNullOrEmpty(captured))
                                 {
-                                    try
-                                    {
-                                        var rx = new Regex(mapping.HeaderRegex, RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Singleline);
-                                        var extractedList = new List<string>();
-                                        foreach (var hv in headerValues)
-                                        {
-                                            var matches = rx.Matches(hv);
-                                            foreach (Match m in matches)
-                                            {
-                                                if (mapping.HeaderGroupIndex < m.Groups.Count)
-                                                {
-                                                    extractedList.Add(m.Groups[mapping.HeaderGroupIndex].Value);
-                                                }
-                                            }
-                                        }
-                                        if (extractedList.Count >0)
-                                        {
-                                            string capturedCombined = string.Join(",", extractedList);
-                                            var converted = TypeConverter.ConvertFromJson(capturedCombined, mapping.DataType);
-                                            if (variables.ContainsKey(mapping.VariableName)) variables[mapping.VariableName].Value = converted;
-                                            else variables[mapping.VariableName] = new Variable(mapping.VariableName, mapping.DataType, VariableSource.Response) { Value = converted };
-                                            Logger.LogInfo($"HttpResponseProcessor: extracted header (regex) {mapping.VariableName} = {capturedCombined}");
-                                        }
-                                        else
-                                        {
-                                            Logger.LogInfo($"HttpResponseProcessor: header regex did not match for header '{mapping.HeaderName}', set default for {mapping.VariableName}");
-                                            SetVariableDefaultValue(mapping.VariableName, mapping.DataType, variables);
-                                        }
-                                    }
-                                    catch (Exception exRx)
-                                    {
-                                        Logger.LogError($"HttpResponseProcessor: invalid header regex for mapping {mapping.VariableName}", exRx);
-                                        SetVariableDefaultValue(mapping.VariableName, mapping.DataType, variables);
-                                    }
+                                    SetVariableDefaultValue(m.VariableName, m.DataType, manager);
                                 }
                                 else
                                 {
-                                    // Join multiple header values with comma and convert
-                                    var combined = string.Join(",", headerValues);
-                                    var converted = TypeConverter.ConvertFromJson(combined, mapping.DataType);
-                                    if (variables.ContainsKey(mapping.VariableName)) variables[mapping.VariableName].Value = converted;
-                                    else variables[mapping.VariableName] = new Variable(mapping.VariableName, mapping.DataType, VariableSource.Response) { Value = converted };
-                                    Logger.LogInfo($"HttpResponseProcessor: extracted header {mapping.VariableName} = {combined}");
+                                    var converted = TypeConverter.ConvertFromJson(captured, m.DataType);
+                                    SetOrRegisterVariable(m.VariableName, m.DataType, converted, manager);
                                 }
                             }
+                            catch (Exception ex)
+                            {
+                                Logger.LogError($"HttpResponseProcessor: extracting header mapping {m.VariableName} failed", ex);
+                                SetVariableDefaultValue(m.VariableName, m.DataType, manager);
+                            }
                         }
-                        else
-                        {
-                            // body/json mapping
-                            ExtractVariable(node, mapping, variables);
-                        }
+
+                        // matched one header value - stop for this header
+                        break;
                     }
-                    catch (Exception exMap)
+                    else
                     {
-                        Logger.LogError($"HttpResponseProcessor: failed processing mapping {mapping.VariableName}", exMap);
-                        // set default on failure
-                        SetVariableDefaultValue(mapping.VariableName, mapping.DataType, variables);
+                        // no regex: single mapping scenario or multiple mappings expecting same whole value
+                        foreach (var m in mappings)
+                        {
+                            try
+                            {
+                                var converted = TypeConverter.ConvertFromJson(hv, m.DataType);
+                                SetOrRegisterVariable(m.VariableName, m.DataType, converted, manager);
+                            }
+                            catch (Exception ex)
+                            {
+                                Logger.LogError($"HttpResponseProcessor: converting header {headerName} for mapping {m.VariableName} failed", ex);
+                                SetVariableDefaultValue(m.VariableName, m.DataType, manager);
+                            }
+                        }
+
+                        anyMatched = true;
+                        break;
                     }
                 }
-                Logger.LogInfo("HttpResponseProcessor: ProcessResponse finished");
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError("HttpResponseProcessor: failed to parse/process response JSON", ex);
-                throw new Exception($"ÏìÓ¦JSON½âÎöÊ§°Ü: {ex.Message}");
+
+                if (!anyMatched)
+                {
+                    // nothing matched -> defaults
+                    foreach (var m in mappings) SetVariableDefaultValue(m.VariableName, m.DataType, manager);
+                }
             }
         }
 
-        private void ExtractVariable(System.Text.Json.Nodes.JsonNode jsonRoot, ResponseMapping mapping, Dictionary<string, Variable> variables)
+        private void ProcessBody(HttpResponseData response, HttpResponseTemplate template, IVariableManager manager)
         {
-            try
+            if (template?.Mappings == null || string.IsNullOrWhiteSpace(response.Body)) return;
+
+            System.Text.Json.Nodes.JsonNode node = null;
+            try { node = _jsonProcessor.ParseJson(response.Body); }
+            catch
             {
-                var value = _jsonProcessor.GetValueByPointer(jsonRoot, mapping.JsonPointer);
-                if (value == null)
-                {
-                    Logger.LogInfo($"HttpResponseProcessor: value not found for mapping {mapping.VariableName} at {mapping.JsonPointer}, setting default");
-                    SetVariableDefaultValue(mapping.VariableName, mapping.DataType, variables);
-                    return;
-                }
-                var converted = TypeConverter.ConvertFromJson(value, mapping.DataType);
-                if (variables.ContainsKey(mapping.VariableName))
-                {
-                    variables[mapping.VariableName].Value = converted;
-                }
-                else
-                {
-                    variables[mapping.VariableName] = new Variable(mapping.VariableName, mapping.DataType, VariableSource.Response) { Value = converted };
-                }
-                Logger.LogInfo($"HttpResponseProcessor: extracted {mapping.VariableName} = {converted}");
+                Logger.LogInfo("HttpResponseProcessor: response body is not valid JSON; skipping body mappings");
+                return;
             }
-            catch (Exception ex)
+
+            var bodyMappings = template.Mappings.Where(m => string.IsNullOrWhiteSpace(m.HeaderName));
+            foreach (var m in bodyMappings)
             {
-                Logger.LogError($"HttpResponseProcessor: failed extracting variable {mapping.VariableName} from {mapping.JsonPointer}", ex);
-                SetVariableDefaultValue(mapping.VariableName, mapping.DataType, variables);
+                try
+                {
+                    object val = null;
+                    if (!string.IsNullOrWhiteSpace(m.JsonPointer))
+                        val = _jsonProcessor.GetValueByPointer(node, m.JsonPointer);
+
+                    if (val == null)
+                    {
+                        SetVariableDefaultValue(m.VariableName, m.DataType, manager);
+                    }
+                    else
+                    {
+                        var converted = TypeConverter.ConvertFromJson(val, m.DataType);
+                        SetOrRegisterVariable(m.VariableName, m.DataType, converted, manager);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError($"HttpResponseProcessor: failed extracting body mapping {m.VariableName}", ex);
+                    SetVariableDefaultValue(m.VariableName, m.DataType, manager);
+                }
             }
         }
 
-        private void SetVariableDefaultValue(string variableName, VariableType dataType, Dictionary<string, Variable> variables)
+        private void SetOrRegisterVariable(string name, VariableType type, object value, IVariableManager manager)
         {
-            // If the variable already exists and user provided a default, use it; otherwise use system default
-            if (variables.ContainsKey(variableName) && variables[variableName].HasUserDefault)
+            var existing = manager.GetVariable(name);
+            if (existing != null) manager.SetVariableValue(name, value);
+            else manager.RegisterVariable(new Variable(name, type, VariableSource.Response) { Value = value });
+        }
+
+        private void SetVariableDefaultValue(string variableName, VariableType dataType, IVariableManager manager)
+        {
+            var existing = manager.GetVariable(variableName);
+            if (existing != null && existing.HasUserDefault)
             {
-                variables[variableName].Value = variables[variableName].GetEffectiveDefault();
-                Logger.LogInfo($"HttpResponseProcessor: set {variableName} to user default = {variables[variableName].Value}");
+                manager.SetVariableValue(variableName, existing.GetEffectiveDefault());
                 return;
             }
 
             var def = TypeConverter.GetDefaultValue(dataType);
-            if (variables.ContainsKey(variableName)) variables[variableName].Value = def;
-            else variables[variableName] = new Variable(variableName, dataType, VariableSource.Response) { Value = def };
+            if (existing != null) manager.SetVariableValue(variableName, def);
+            else manager.RegisterVariable(new Variable(variableName, dataType, VariableSource.Response) { Value = def });
         }
 
         public bool ValidateResponse(HttpResponseData response, HttpResponseTemplate template)

@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using PLC2MES.Core.Models;
 using PLC2MES.Core.Processors;
+using PLC2MES.Core.Services;
 using PLC2MES.Utils;
 
 namespace PLC2MES.Core.Parsers
@@ -11,32 +12,26 @@ namespace PLC2MES.Core.Parsers
     public class ResponseTemplateParser
     {
         private JsonProcessor _jsonProcessor;
+        private readonly IVariableManager _vars;
 
-        public ResponseTemplateParser()
+        public ResponseTemplateParser(IVariableManager vars)
         {
             _jsonProcessor = new JsonProcessor();
+            _vars = vars ?? throw new ArgumentNullException(nameof(vars));
         }
 
         public HttpResponseTemplate Parse(string templateText)
         {
             Logger.LogInfo("ResponseTemplateParser: Parse called");
-            try
-            {
-                if (string.IsNullOrWhiteSpace(templateText)) throw new ArgumentException("响应模板文本不能为空");
-                var template = new HttpResponseTemplate { OriginalText = templateText };
-                string[] parts = SplitHeaderAndBody(templateText);
-                string headerSection = parts[0];
-                string bodySection = parts.Length > 1 ? parts[1] : string.Empty;
-                ParseHeaderSection(headerSection, template);
-                if (!string.IsNullOrWhiteSpace(bodySection)) ParseBodySection(bodySection, template);
-                Logger.LogInfo($"ResponseTemplateParser: Parse finished, mappings={template.Mappings.Count}");
-                return template;
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError("ResponseTemplateParser: Parse failed", ex);
-                throw;
-            }
+            if (string.IsNullOrWhiteSpace(templateText)) throw new ArgumentException("响应模板文本不能为空");
+            var template = new HttpResponseTemplate { OriginalText = templateText };
+            string[] parts = SplitHeaderAndBody(templateText);
+            string headerSection = parts[0];
+            string bodySection = parts.Length > 1 ? parts[1] : string.Empty;
+            ParseHeaderSection(headerSection, template);
+            if (!string.IsNullOrWhiteSpace(bodySection)) ParseBodySection(bodySection, template);
+            Logger.LogInfo($"ResponseTemplateParser: Parse finished, mappings={template.Mappings.Count}");
+            return template;
         }
 
         private string[] SplitHeaderAndBody(string text)
@@ -74,25 +69,27 @@ namespace PLC2MES.Core.Parsers
 
             try
             {
-                // Find placeholders in header value - support both @Type(var) and @(var)
-                var combined = new Regex("(" + RegexPatterns.BodyVariable + ")|(" + RegexPatterns.HeaderVariable + ")", RegexOptions.Compiled);
-                var matches = combined.Matches(value);
+                // Use unified variable regex with named groups
+                var varRegex = new Regex(RegexPatterns.Variable, RegexOptions.Compiled);
+                var matches = varRegex.Matches(value);
                 if (matches.Count == 0)
                 {
                     // If the entire value is exactly a simple @(Var) treat as whole-value mapping (legacy behavior)
-                    var hvMatch = Regex.Match(value, "^\\s*" + RegexPatterns.HeaderVariable + "\\s*$");
+                    var hvMatch = Regex.Match(value, "^\\s*" + RegexPatterns.Variable + "\\s*$");
                     if (hvMatch.Success)
                     {
-                        string varName = hvMatch.Groups[1].Value;
-                        string format = hvMatch.Groups[2].Success ? hvMatch.Groups[2].Value : null;
+                        string varName = hvMatch.Groups["var"].Value;
                         var mapping = new ResponseMapping
                         {
                             Id = StringHelper.GenerateUniqueId(),
                             HeaderName = key,
                             VariableName = varName,
-                            DataType = VariableType.String
+                            DataType = VariableType.String,
+                            HeaderGroupIndex = 1,
+                            HeaderRegex = "^(.+?)$"
                         };
                         template.Mappings.Add(mapping);
+                        _vars.RegisterVariable(new Variable(varName, VariableType.String, VariableSource.Response));
                     }
                     return;
                 }
@@ -101,6 +98,9 @@ namespace PLC2MES.Core.Parsers
                 var patternBuilder = new StringBuilder();
                 int lastIndex = 0;
                 int groupIndex = 1; // capture group numbering starts at 1
+
+                // Temp list to hold mapping info until final pattern is known
+                var tempMappings = new List<ResponseMapping>();
 
                 foreach (Match match in matches)
                 {
@@ -111,47 +111,22 @@ namespace PLC2MES.Core.Parsers
                     // insert a non-greedy capture group
                     patternBuilder.Append("(.+?)");
 
-                    // determine placeholder info and create mapping for this placeholder
-                    string varName = null;
+                    // extract placeholder info via named groups
+                    string varName = match.Groups["var"].Value;
+                    string typeStr = match.Groups["type"].Success ? match.Groups["type"].Value : null;
                     VariableType dataType = VariableType.String;
+                    if (!string.IsNullOrEmpty(typeStr)) dataType = ParseVariableType(typeStr);
 
-                    // check which group matched
-                    if (match.Groups[1].Success)
-                    {
-                        // BodyVariable matched: groups:1(type),2(varName),3(format) depending on pattern grouping
-                        // But because combined groups, extract inner groups via inner match
-                        var inner = Regex.Match(match.Value, RegexPatterns.BodyVariable);
-                        if (inner.Success)
-                        {
-                            var typeStr = inner.Groups[1].Value;
-                            varName = inner.Groups[2].Value;
-                            var fmt = inner.Groups[3].Success ? inner.Groups[3].Value : null;
-                            dataType = ParseVariableType(typeStr);
-                        }
-                    }
-                    else if (match.Groups[4].Success || match.Groups[2].Success)
-                    {
-                        // HeaderVariable matched
-                        var inner = Regex.Match(match.Value, RegexPatterns.HeaderVariable);
-                        if (inner.Success)
-                        {
-                            varName = inner.Groups[1].Value;
-                            var fmt = inner.Groups[2].Success ? inner.Groups[2].Value : null;
-                            dataType = VariableType.String;
-                        }
-                    }
-
-                    // Create mapping referencing the header regex and the group index
+                    // create temp mapping referencing the group index
                     var map = new ResponseMapping
                     {
                         Id = StringHelper.GenerateUniqueId(),
                         HeaderName = key,
-                        HeaderRegex = patternBuilder.ToString() + ".*", // allow rest of header to remain
                         HeaderGroupIndex = groupIndex,
                         VariableName = varName,
                         DataType = dataType
                     };
-                    template.Mappings.Add(map);
+                    tempMappings.Add(map);
 
                     groupIndex++;
                     lastIndex = match.Index + match.Length;
@@ -164,13 +139,14 @@ namespace PLC2MES.Core.Parsers
                     patternBuilder.Append(Regex.Escape(tail));
                 }
 
-                // Finalize header regex for mappings that were added referencing the same header
-                string finalPattern = patternBuilder.ToString();
-                // update HeaderRegex for mappings that were just added for this header
-                int startUpdate = template.Mappings.Count - (groupIndex - 1);
-                for (int i = startUpdate; i < template.Mappings.Count; i++)
+                // Finalize header regex for mappings that were added for this header
+                string finalPattern = "^" + patternBuilder.ToString() + "$";
+
+                foreach (var map in tempMappings)
                 {
-                    template.Mappings[i].HeaderRegex = finalPattern;
+                    map.HeaderRegex = finalPattern;
+                    template.Mappings.Add(map);
+                    _vars.RegisterVariable(new Variable(map.VariableName, map.DataType, VariableSource.Response));
                 }
             }
             catch (Exception ex)
@@ -183,12 +159,16 @@ namespace PLC2MES.Core.Parsers
         {
             // Extract expressions in body and replace with quoted placeholders
             var expressions = new List<TemplateExpression>();
-            string processed = Regex.Replace(bodySection, RegexPatterns.BodyVariable, match =>
+            var varRegex = new Regex(RegexPatterns.Variable, RegexOptions.Compiled);
+            string processed = varRegex.Replace(bodySection, match =>
             {
-                string typeStr = match.Groups[1].Value; string varName = match.Groups[2].Value; string format = match.Groups[3].Success ? match.Groups[3].Value : null;
-                VariableType varType = ParseVariableType(typeStr);
+                string typeStr = match.Groups["type"].Success ? match.Groups["type"].Value : null;
+                string varName = match.Groups["var"].Value;
+                string format = match.Groups["format"].Success ? match.Groups["format"].Value : null;
+                VariableType varType = string.IsNullOrEmpty(typeStr) ? VariableType.String : ParseVariableType(typeStr);
                 var expr = new TemplateExpression { Id = StringHelper.GenerateUniqueId(), VariableName = varName, DataType = varType, FormatString = format, OriginalText = match.Value, Location = ExpressionLocation.Body };
                 expressions.Add(expr);
+                _vars.RegisterVariable(new Variable(varName, varType, VariableSource.Response));
                 return "\"" + StringHelper.CreatePlaceholder(expr.Id) + "\"";
             });
             template.BodyTemplate = processed;
@@ -211,6 +191,7 @@ namespace PLC2MES.Core.Parsers
                                 {
                                     var mapping = new ResponseMapping { Id = id, JsonPointer = path, VariableName = expression.VariableName, DataType = expression.DataType.Value };
                                     template.Mappings.Add(mapping);
+                                    _vars.RegisterVariable(new Variable(expression.VariableName, expression.DataType.Value, VariableSource.Response));
                                 }
                             }
                         }

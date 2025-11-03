@@ -1,46 +1,64 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using PLC2MES.Core.Models;
 
 namespace PLC2MES.Core.Services
 {
-    public class VariableManager
+    public class VariableManager : IVariableManager
     {
-        private Dictionary<string, Variable> _variables = new Dictionary<string, Variable>();
+        private readonly Dictionary<string, Variable> _variables = new Dictionary<string, Variable>(StringComparer.OrdinalIgnoreCase);
+        public event EventHandler<VariableChangedEventArgs> VariableChanged;
+        public event EventHandler<string> VariableRegistered;
 
         public void RegisterVariable(Variable variable)
         {
-            if (variable == null) return;
-            if (string.IsNullOrWhiteSpace(variable.Name)) return;
+            // assume caller provides valid variable; minimal checks
+            if (variable == null || string.IsNullOrWhiteSpace(variable.Name)) return;
             _variables[variable.Name] = variable;
+            VariableRegistered?.Invoke(this, variable.Name);
         }
 
         public Variable GetVariable(string name)
         {
-            if (_variables.ContainsKey(name)) return _variables[name];
-            return null;
+            if (string.IsNullOrEmpty(name)) return null;
+            _variables.TryGetValue(name, out var v);
+            return v;
         }
 
         public bool SetVariableValue(string name, object value)
         {
-            if (!_variables.ContainsKey(name)) return false;
-            _variables[name].Value = value;
+            if (string.IsNullOrEmpty(name)) return false;
+            if (!_variables.TryGetValue(name, out var v)) return false;
+            var old = v.Value;
+            v.Value = value;
+            VariableChanged?.Invoke(this, new VariableChangedEventArgs { Name = name, OldValue = old, NewValue = value });
             return true;
+        }
+
+        public bool TrySetValueFromString(string name, string valueString)
+        {
+            var v = GetVariable(name);
+            if (v == null) return false;
+            var ok = v.TrySetValue(valueString);
+            if (ok) VariableChanged?.Invoke(this, new VariableChangedEventArgs { Name = name, OldValue = null, NewValue = v.Value });
+            return ok;
         }
 
         public Dictionary<string, Variable> GetAllVariables()
         {
-            return new Dictionary<string, Variable>(_variables);
+            // return shallow copy
+            return new Dictionary<string, Variable>(_variables, StringComparer.OrdinalIgnoreCase);
         }
 
         public List<Variable> GetRequestVariables()
         {
-            return _variables.Values.Where(v => v.Source == VariableSource.Request).OrderBy(v => v.Name).ToList();
+            return _variables.Values.Where(x => x.Source == VariableSource.Request).OrderBy(x => x.Name).ToList();
         }
 
         public List<Variable> GetResponseVariables()
         {
-            return _variables.Values.Where(v => v.Source == VariableSource.Response).OrderBy(v => v.Name).ToList();
+            return _variables.Values.Where(x => x.Source == VariableSource.Response).OrderBy(x => x.Name).ToList();
         }
 
         public bool AreAllRequestVariablesSet()
@@ -55,15 +73,14 @@ namespace PLC2MES.Core.Services
 
         public List<string> GetUnsetVariableNames()
         {
-            var list = new List<string>();
-            foreach (var v in GetRequestVariables())
-            {
-                if (v.Value == null || (v.Type == VariableType.String && string.IsNullOrEmpty(v.Value.ToString()))) list.Add(v.Name);
-            }
-            return list;
+            return GetRequestVariables().Where(v => v.Value == null || (v.Type == VariableType.String && string.IsNullOrEmpty(v.Value.ToString()))).Select(v => v.Name).ToList();
         }
 
-        public void Clear() { _variables.Clear(); }
+        public void Clear()
+        {
+            _variables.Clear();
+        }
+
         public int Count => _variables.Count;
     }
 }
