@@ -109,18 +109,45 @@ namespace PLC2MES.Core.Parsers
                 string typeStr = match.Groups["type"].Success ? match.Groups["type"].Value : null;
                 string varName = match.Groups["var"].Value;
                 string format = match.Groups["format"].Success ? match.Groups["format"].Value : null;
-                VariableType varType = string.IsNullOrEmpty(typeStr) ? VariableType.String : ParseVariableType(typeStr);
-                var expression = new TemplateExpression { Id = StringHelper.GenerateUniqueId(), VariableName = varName, DataType = varType, FormatString = format, OriginalText = match.Value, Location = ExpressionLocation.Body };
+
+                bool isArray;
+                VariableType varType = ParseVariableType(typeStr, out isArray);
+
+                var expression = new TemplateExpression { Id = StringHelper.GenerateUniqueId(), VariableName = varName, DataType = varType, IsArray = isArray, FormatString = format, OriginalText = match.Value, Location = ExpressionLocation.Body };
                 template.Expressions.Add(expression);
-                _vars.RegisterVariable(new Variable(varName, varType, VariableSource.Request, format));
-                // Return quoted placeholder so the JSON remains valid
+
+                // register variable: create variable object and set IsArray/value correctly
+                var variable = new Variable(varName, varType, VariableSource.Request, format) { IsArray = isArray };
+                if (isArray) variable.Value = new List<object>();
+                _vars.RegisterVariable(variable);
+
+                // For arrays we must not quote the placeholder (so replacement will produce a JSON array later)
+                if (isArray) return StringHelper.CreatePlaceholder(expression.Id);
+
+                // Return quoted placeholder so the JSON remains valid for scalars
                 return "\"" + StringHelper.CreatePlaceholder(expression.Id) + "\"";
             });
         }
 
-        private VariableType ParseVariableType(string typeStr)
+        private VariableType ParseVariableType(string typeStr, out bool isArray)
         {
-            switch (typeStr.ToLower())
+            isArray = false;
+            if (string.IsNullOrEmpty(typeStr)) return VariableType.String;
+
+            // support Array<Elem> or Elem[]
+            var s = typeStr.Trim();
+            if (s.EndsWith("[]"))
+            {
+                isArray = true;
+                s = s.Substring(0, s.Length -2);
+            }
+            else if (s.StartsWith("Array<") && s.EndsWith(">"))
+            {
+                isArray = true;
+                s = s.Substring(6, s.Length -7);
+            }
+
+            switch (s.ToLower())
             {
                 case "bool": return VariableType.Bool;
                 case "int":

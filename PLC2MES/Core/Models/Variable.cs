@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using PLC2MES.Utils;
 
 namespace PLC2MES.Core.Models
 {
@@ -9,6 +11,9 @@ namespace PLC2MES.Core.Models
         public object Value { get; set; }
         public string FormatString { get; set; }
         public VariableSource Source { get; set; }
+
+        // Whether this variable represents an array of elements of 'Type'
+        public bool IsArray { get; set; }
 
         // User-configurable default value (used when extraction fails)
         public bool HasUserDefault { get; private set; }
@@ -22,6 +27,7 @@ namespace PLC2MES.Core.Models
             Type = type;
             Source = source;
             FormatString = formatString;
+            IsArray = false;
             Value = GetDefaultValue(type);
             HasUserDefault = false;
             UserDefaultValue = null;
@@ -51,6 +57,12 @@ namespace PLC2MES.Core.Models
             if (Value == null)
                 return string.Empty;
 
+            if (IsArray)
+            {
+                // represent array as JSON-like string
+                return TypeConverter.ConvertToJsonString(Value, Type, true);
+            }
+
             if (Type == VariableType.DateTime && !string.IsNullOrEmpty(FormatString))
             {
                 if (Value is DateTime dt)
@@ -69,6 +81,13 @@ namespace PLC2MES.Core.Models
         {
             try
             {
+                if (IsArray)
+                {
+                    var converted = TypeConverter.ConvertFromJson(valueString, Type, true);
+                    Value = converted;
+                    return true;
+                }
+
                 switch (Type)
                 {
                     case VariableType.Bool:
@@ -101,6 +120,14 @@ namespace PLC2MES.Core.Models
         {
             try
             {
+                if (IsArray)
+                {
+                    var converted = TypeConverter.ConvertFromJson(valueString, Type, true);
+                    HasUserDefault = true;
+                    UserDefaultValue = converted;
+                    return true;
+                }
+
                 object parsed = null;
                 switch (Type)
                 {

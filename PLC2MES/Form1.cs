@@ -201,6 +201,62 @@ namespace PLC2MES
             dgvRequestVariables.CurrentCellDirtyStateChanged += DgvRequestVariables_CurrentCellDirtyStateChanged;
             dgvResponseVariables.CellValueChanged += DgvResponseVariables_CellValueChanged;
             dgvResponseVariables.CurrentCellDirtyStateChanged += DgvRequestVariables_CurrentCellDirtyStateChanged;
+
+            // open array editor on double click when variable.IsArray
+            dgvRequestVariables.CellDoubleClick += DgvVariables_CellDoubleClick;
+            dgvResponseVariables.CellDoubleClick += DgvVariables_CellDoubleClick;
+        }
+
+        private void DgvVariables_CellDoubleClick(object sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex <0 || e.ColumnIndex <0) return;
+            var grid = sender as DataGridView;
+            var colName = grid.Columns[e.ColumnIndex].Name;
+            if (colName != "VariableValue" && colName != "UserDefault") return;
+
+            var row = grid.Rows[e.RowIndex];
+            if (!(row.Tag is Variable variable)) return;
+            if (!variable.IsArray) return;
+
+            string current = row.Cells[colName].Value?.ToString() ?? string.Empty;
+            // launch simple array editor dialog
+            var edited = ArrayEditorDialog.ShowDialog(this, current);
+            if (edited == null) return; // cancelled
+
+            // update cell and variable
+            row.Cells[colName].Value = edited;
+            try
+            {
+                if (colName == "VariableValue")
+                {
+                    variable.TrySetValue(edited);
+                }
+                else if (colName == "UserDefault")
+                {
+                    if (string.IsNullOrWhiteSpace(edited))
+                    {
+                        variable.ClearUserDefault();
+                        _userDefaults.Remove(variable.Name);
+                    }
+                    else
+                    {
+                        if (variable.SetUserDefaultFromString(edited))
+                        {
+                            _userDefaults[variable.Name] = edited;
+                            SaveUserDefaults();
+                        }
+                        else
+                        {
+                            MessageBox.Show($"默认值 '{edited}' 无法转换为类型 {variable.Type}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            row.Cells["UserDefault"].Value = variable.HasUserDefault ? variable.UserDefaultValue?.ToString() : string.Empty;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"数组编辑失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         private void DgvRequestVariables_CurrentCellDirtyStateChanged(object sender, EventArgs e)

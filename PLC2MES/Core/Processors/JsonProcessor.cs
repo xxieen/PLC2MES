@@ -150,8 +150,11 @@ namespace PLC2MES.Core.Processors
             foreach (var kv in replacements)
             {
                 string placeholder = StringHelper.CreatePlaceholder(kv.Key);
+                // replace quoted placeholder first (scalar placeholders)
                 string quoted = "\"" + placeholder + "\"";
                 result = result.Replace(quoted, kv.Value);
+                // replace unquoted placeholder (array placeholders or raw replacements)
+                result = result.Replace(placeholder, kv.Value);
             }
             return result;
         }

@@ -180,7 +180,7 @@ namespace PLC2MES.Core.Processors
                     }
                     else
                     {
-                        var converted = TypeConverter.ConvertFromJson(val, m.DataType);
+                        var converted = TypeConverter.ConvertFromJson(val, m.DataType, m.IsArray);
                         SetOrRegisterVariable(m.VariableName, m.DataType, converted, manager);
                     }
                 }

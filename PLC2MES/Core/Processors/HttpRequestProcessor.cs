@@ -96,13 +96,14 @@ namespace PLC2MES.Core.Processors
                 if (variables.ContainsKey(expression.VariableName))
                 {
                     var variable = variables[expression.VariableName];
-                    string jsonValue = TypeConverter.ConvertToJsonString(variable.Value, variable.Type);
+                    string jsonValue = TypeConverter.ConvertToJsonString(variable.Value, variable.Type, expression.IsArray);
                     replacements[expression.Id] = jsonValue;
                 }
                 else
                 {
                     var def = TypeConverter.GetDefaultValue(expression.DataType.Value);
-                    string jsonValue = TypeConverter.ConvertToJsonString(def, expression.DataType.Value);
+                    // if array expected, wrap default into array JSON
+                    string jsonValue = TypeConverter.ConvertToJsonString(def, expression.DataType.Value, expression.IsArray);
                     replacements[expression.Id] = jsonValue;
                 }
             }
