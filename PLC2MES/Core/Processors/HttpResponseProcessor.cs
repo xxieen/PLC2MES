@@ -109,7 +109,7 @@ namespace PLC2MES.Core.Processors
                                 }
                                 else
                                 {
-                                    var converted = TypeConverter.ConvertFromJson(captured, m.DataType);
+                                    var converted = TypeConverter.ConvertFromJson(captured, m.DataType, m.IsArray);
                                     SetOrRegisterVariable(m.VariableName, m.DataType, converted, manager);
                                 }
                             }
@@ -130,7 +130,7 @@ namespace PLC2MES.Core.Processors
                         {
                             try
                             {
-                                var converted = TypeConverter.ConvertFromJson(hv, m.DataType);
+                                var converted = TypeConverter.ConvertFromJson(hv, m.DataType, m.IsArray);
                                 SetOrRegisterVariable(m.VariableName, m.DataType, converted, manager);
                             }
                             catch (Exception ex)
@@ -195,8 +195,17 @@ namespace PLC2MES.Core.Processors
         private void SetOrRegisterVariable(string name, VariableType type, object value, IVariableManager manager)
         {
             var existing = manager.GetVariable(name);
-            if (existing != null) manager.SetVariableValue(name, value);
-            else manager.RegisterVariable(new Variable(name, type, VariableSource.Response) { Value = value });
+            bool valueIsArray = value is System.Collections.IEnumerable && !(value is string);
+            if (existing != null)
+            {
+                existing.IsArray = valueIsArray;
+                manager.SetVariableValue(name, value);
+            }
+            else
+            {
+                var v = new Variable(name, type, VariableSource.Response) { Value = value, IsArray = valueIsArray };
+                manager.RegisterVariable(v);
+            }
         }
 
         private void SetVariableDefaultValue(string variableName, VariableType dataType, IVariableManager manager)

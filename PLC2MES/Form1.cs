@@ -92,6 +92,12 @@ namespace PLC2MES
             }
         }
 
+        private string GetDisplayType(Variable v)
+        {
+            if (v == null) return string.Empty;
+            return v.IsArray ? $"Array<{v.Type}>" : v.Type.ToString();
+        }
+
         private void EnsureResponseRow(Variable v)
         {
             // find existing row by variable name
@@ -101,14 +107,14 @@ namespace PLC2MES
                 {
                     // update tag and cells
                     row.Tag = v;
-                    row.Cells["VariableType"].Value = v.Type.ToString();
+                    row.Cells["VariableType"].Value = GetDisplayType(v);
                     row.Cells["VariableValue"].Value = v.GetFormattedValue();
                     return;
                 }
             }
 
             // not found -> add
-            int idx = dgvResponseVariables.Rows.Add(v.Name, v.Type.ToString(), v.GetFormattedValue(), "", v.HasUserDefault ? v.UserDefaultValue?.ToString() : "");
+            int idx = dgvResponseVariables.Rows.Add(v.Name, GetDisplayType(v), v.GetFormattedValue(), "", v.HasUserDefault ? v.UserDefaultValue?.ToString() : "");
             dgvResponseVariables.Rows[idx].Tag = v;
         }
 
@@ -302,7 +308,7 @@ namespace PLC2MES
                 {
                     v.SetUserDefaultFromString(ud);
                 }
-                var idx = dgvRequestVariables.Rows.Add(v.Name, v.Type.ToString(), v.Value?.ToString() ?? "", v.FormatString ?? "", v.HasUserDefault ? v.UserDefaultValue?.ToString() : "");
+                var idx = dgvRequestVariables.Rows.Add(v.Name, GetDisplayType(v), v.GetFormattedValue(), v.FormatString ?? "", v.HasUserDefault ? v.UserDefaultValue?.ToString() : "");
                 dgvRequestVariables.Rows[idx].Tag = v;
             }
             dgvResponseVariables.Rows.Clear();
@@ -312,7 +318,7 @@ namespace PLC2MES
                 {
                     v.SetUserDefaultFromString(ud);
                 }
-                var idx = dgvResponseVariables.Rows.Add(v.Name, v.Type.ToString(), v.Value?.ToString() ?? "", "", v.HasUserDefault ? v.UserDefaultValue?.ToString() : "");
+                var idx = dgvResponseVariables.Rows.Add(v.Name, GetDisplayType(v), v.GetFormattedValue(), "", v.HasUserDefault ? v.UserDefaultValue?.ToString() : "");
                 dgvResponseVariables.Rows[idx].Tag = v;
             }
         }
