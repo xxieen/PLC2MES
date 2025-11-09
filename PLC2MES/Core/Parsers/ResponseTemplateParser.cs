@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Text.Json.Nodes;
 using PLC2MES.Core.Models;
 using PLC2MES.Core.Processors;
 using PLC2MES.Core.Services;
@@ -178,15 +180,16 @@ namespace PLC2MES.Core.Parsers
                 var v = new Variable(varName, varType, VariableSource.Response);
                 _vars.RegisterVariable(v);
 
-                return varType.IsArray ? StringHelper.CreatePlaceholder(expr.Id) : "\"" + StringHelper.CreatePlaceholder(expr.Id) + "\"";
+                // 始终包裹引号，保证模板文本永远是合法 JSON，后续解析才不会报错
+                return "\"" + StringHelper.CreatePlaceholder(expr.Id) + "\"";
             });
             template.BodyTemplate = processed;
 
             // Parse JSON and traverse to find placeholders
             try
             {
-                var node = _jsonProcessor.ParseJson(processed);
-                _jsonProcessor.TraverseJson(node, "", (path, value) =>
+                var rootNode = _jsonProcessor.ParseJson(processed);
+                _jsonProcessor.TraverseJson(rootNode, "", (path, value) =>
                 {
                     try
                     {
@@ -199,6 +202,11 @@ namespace PLC2MES.Core.Parsers
                                 if (expression != null)
                                 {
                                     var mapping = new ResponseMapping { Id = id, JsonPointer = path, VariableName = expression.VariableName, DataType = expression.DataType };
+                                    if (expression.DataType != null && expression.DataType.IsArray)
+                                    {
+                                        // 如果指向数组元素内部，则改走“数组投影”逻辑
+                                        TryConfigureArrayProjectionMapping(rootNode, path, expression, mapping);
+                                    }
                                     template.Mappings.Add(mapping);
                                     _vars.RegisterVariable(new Variable(expression.VariableName, expression.DataType, VariableSource.Response));
                                 }
@@ -222,6 +230,39 @@ namespace PLC2MES.Core.Parsers
         {
             bool dummy;
             return ParseVariableType(typeStr, out dummy);
+        }
+
+        /// <summary>
+        /// 如果 @Array<T> 出现在数组元素内部，将 mapping 转换为“数组投影”形式
+        /// </summary>
+        private bool TryConfigureArrayProjectionMapping(JsonNode rootNode, string placeholderPath, TemplateExpression expression, ResponseMapping mapping)
+        {
+            if (rootNode == null || string.IsNullOrEmpty(placeholderPath) || expression?.DataType == null || !expression.DataType.IsArray)
+                return false;
+
+            // 例如 /preferences/0/category 会被拆成 ["preferences","0","category"]
+            var segments = JsonProcessor.SplitPointerSegments(placeholderPath);
+            if (segments.Length == 0) return false;
+
+            for (int i = segments.Length - 1; i >= 0; i--)
+            {
+                // 只要某一段是纯数字，就视为数组下标，从尾部向前找最近的数组
+                if (!int.TryParse(segments[i], out _)) continue;
+
+                // 找到最近的数组节点，并把其余路径当作元素内路径
+                var collectionPointer = JsonProcessor.BuildPointerFromSegments(segments.Take(i), includeLeadingSlash: true, emptyResultAsSlash: true);
+                if (!_jsonProcessor.TryGetNodeByPointer(rootNode, collectionPointer, out var ancestor) || ancestor is not JsonArray)
+                    continue;
+
+                // 剩余的段就是元素内部路径，例如 ["category"]
+                var relativeSegments = segments.Skip(i + 1);
+                mapping.CollectionPointer = collectionPointer;
+                mapping.ElementRelativePointer = JsonProcessor.BuildPointerFromSegments(relativeSegments, includeLeadingSlash: true, emptyResultAsSlash: false);
+                mapping.JsonPointer = null;
+                return true;
+            }
+
+            return false;
         }
 
         private VariableType ParseVariableType(string typeStr, out bool isArray)

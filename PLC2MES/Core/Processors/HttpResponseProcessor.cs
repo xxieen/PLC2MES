@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Text.Json.Nodes;
 using PLC2MES.Core.Models;
 using PLC2MES.Core.Services;
 using PLC2MES.Utils;
@@ -170,6 +171,13 @@ namespace PLC2MES.Core.Processors
             {
                 try
                 {
+                    if (!string.IsNullOrWhiteSpace(m.CollectionPointer))
+                    {
+                        // 新增数组投影处理逻辑：把同级元素的值聚合成数组
+                        ProcessCollectionMapping(node, m, manager);
+                        continue;
+                    }
+
                     object val = null;
                     if (!string.IsNullOrWhiteSpace(m.JsonPointer))
                         val = _jsonProcessor.GetValueByPointer(node, m.JsonPointer);
@@ -265,6 +273,41 @@ namespace PLC2MES.Core.Processors
             if (!string.IsNullOrWhiteSpace(response.ErrorMessage)) { sb.AppendLine(); sb.AppendLine($"Error: {response.ErrorMessage}"); }
             Logger.LogInfo($"HttpResponseProcessor: FormatResponse called, status={response.StatusCode}");
             return sb.ToString();
+        }
+
+        private void ProcessCollectionMapping(JsonNode rootNode, ResponseMapping mapping, IVariableManager manager)
+        {
+            try
+            {
+                // 找到模板解析阶段记录的数组根节点，例如 /preferences
+                var collectionNode = _jsonProcessor.GetNodeByPointer(rootNode, mapping.CollectionPointer);
+                if (collectionNode is not JsonArray jsonArray)
+                {
+                    // 模板里声明了字段，但响应没有对应数组，直接回退到默认值
+                    SetVariableDefaultValue(mapping.VariableName, mapping.DataType, manager);
+                    return;
+                }
+
+                var elementType = mapping.DataType?.ElementType ?? VariableType.CreateScalar(VariableKind.String);
+                var results = new List<object>();
+
+                foreach (var element in jsonArray)
+                {
+                    // 针对数组里的每个元素，继续使用 ElementRelativePointer 取出具体字段
+                    var rawValue = _jsonProcessor.GetValueFromNode(element, mapping.ElementRelativePointer);
+                    // ConvertFromJson 可以把 string/int/datetime 等统一转换成变量声明的元素类型
+                    var convertedElement = TypeConverter.ConvertFromJson(rawValue, elementType);
+                    results.Add(convertedElement);
+                }
+
+                // results 即为聚合好的数组
+                SetOrRegisterVariable(mapping.VariableName, mapping.DataType, results, manager);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"HttpResponseProcessor: failed extracting collection mapping {mapping.VariableName}", ex);
+                SetVariableDefaultValue(mapping.VariableName, mapping.DataType, manager);
+            }
         }
     }
 }

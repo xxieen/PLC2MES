@@ -35,40 +35,70 @@ namespace PLC2MES.Core.Processors
         /// </summary>
         public object GetValueByPointer(JsonNode root, string jsonPointer)
         {
-            if (root == null) return null;
-            if (string.IsNullOrEmpty(jsonPointer) || jsonPointer == "/") return ConvertJsonNode(root);
+            if (!TryGetNodeByPointer(root, jsonPointer, out var node)) return null;
+            return ConvertJsonNode(node);
+        }
 
-            string[] segments = jsonPointer.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+        /// <summary>
+        /// 返回原始 JsonNode，方便上层继续遍历
+        /// </summary>
+        public JsonNode GetNodeByPointer(JsonNode root, string jsonPointer)
+        {
+            TryGetNodeByPointer(root, jsonPointer, out var node);
+            return node;
+        }
+
+        /// <summary>
+        /// 尝试根据 JSON Pointer 获取 JsonNode
+        /// </summary>
+        public bool TryGetNodeByPointer(JsonNode root, string jsonPointer, out JsonNode node)
+        {
+            node = null;
+            if (root == null) return false;
+            if (string.IsNullOrEmpty(jsonPointer) || jsonPointer == "/")
+            {
+                node = root;
+                return true;
+            }
+
+            var segments = SplitPointerSegments(jsonPointer);
             JsonNode current = root;
 
             foreach (var seg in segments)
             {
-                string unescaped = seg.Replace("~1", "/").Replace("~0", "~");
-
                 if (current is JsonObject obj)
                 {
-                    if (!obj.TryGetPropertyValue(unescaped, out JsonNode next))
-                        return null;
+                    // 对象节点：把段当作属性名
+                    if (!obj.TryGetPropertyValue(seg, out JsonNode next)) return false;
                     current = next;
                 }
                 else if (current is JsonArray arr)
                 {
-                    if (int.TryParse(unescaped, out int idx) && idx >= 0 && idx < arr.Count)
-                    {
-                        current = arr[idx];
-                    }
-                    else
-                    {
-                        return null;
-                    }
+                    // 数组节点：段需要能转换成索引
+                    if (!int.TryParse(seg, out int idx) || idx < 0 || idx >= arr.Count) return false;
+                    current = arr[idx];
                 }
                 else
                 {
-                    return null;
+                    return false;
                 }
             }
 
-            return ConvertJsonNode(current);
+            node = current;
+            return true;
+        }
+
+        /// <summary>
+        /// 以某个节点作为根节点，继续使用相对 Pointer 取值
+        /// </summary>
+        public object GetValueFromNode(JsonNode root, string relativePointer)
+        {
+            if (root == null) return null;
+            if (string.IsNullOrEmpty(relativePointer) || relativePointer == "/") return ConvertJsonNode(root);
+
+            // relativePointer 可能是 "category" 或 "/category"，统一转换成绝对指针再复用 TryGetNodeByPointer
+            string normalized = relativePointer.StartsWith("/") ? relativePointer : "/" + relativePointer;
+            return TryGetNodeByPointer(root, normalized, out var node) ? ConvertJsonNode(node) : null;
         }
 
         /// <summary>
@@ -82,7 +112,7 @@ namespace PLC2MES.Core.Processors
             {
                 foreach (var kvp in obj)
                 {
-                    string newPath = currentPath + "/" + EscapeJsonPointer(kvp.Key);
+                    string newPath = currentPath + "/" + EscapePointerSegment(kvp.Key);
                     if (kvp.Value is JsonValue)
                     {
                         callback(newPath, ConvertJsonNode(kvp.Value));
@@ -115,11 +145,6 @@ namespace PLC2MES.Core.Processors
             }
         }
 
-        private string EscapeJsonPointer(string segment)
-        {
-            return segment.Replace("~", "~0").Replace("/", "~1");
-        }
-
         private object ConvertJsonNode(JsonNode node)
         {
             if (node == null) return null;
@@ -139,6 +164,68 @@ namespace PLC2MES.Core.Processors
 
             // For objects/arrays return their string representation
             return node.ToJsonString();
+        }
+
+        /// <summary>
+        /// 拆分 JSON Pointer 为解码后的段
+        /// </summary>
+        public static string[] SplitPointerSegments(string jsonPointer)
+        {
+            if (string.IsNullOrEmpty(jsonPointer)) return Array.Empty<string>();
+            var segments = jsonPointer.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+            if (segments.Length == 0) return Array.Empty<string>();
+
+            var result = new string[segments.Length];
+            for (int i = 0; i < segments.Length; i++)
+            {
+                // Pointer 中的 "~1" 表示 "/"，"~0" 表示 "~"，这里需要反转义成原字符
+                result[i] = UnescapePointerSegment(segments[i]);
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// 根据段构建 JSON Pointer，可控制前缀
+        /// </summary>
+        public static string BuildPointerFromSegments(IEnumerable<string> segments, bool includeLeadingSlash = true, bool emptyResultAsSlash = true)
+        {
+            if (segments == null)
+            {
+                return includeLeadingSlash
+                    ? (emptyResultAsSlash ? "/" : string.Empty)
+                    : string.Empty;
+            }
+
+            var list = new List<string>();
+            foreach (var seg in segments)
+            {
+                if (string.IsNullOrEmpty(seg)) continue;
+                // 构建指针时需要做转义，防止属性名里本身带 "/" 或 "~"
+                list.Add(EscapePointerSegment(seg));
+            }
+
+            if (list.Count == 0)
+            {
+                return includeLeadingSlash
+                    ? (emptyResultAsSlash ? "/" : string.Empty)
+                    : string.Empty;
+            }
+
+            string joined = string.Join("/", list);
+            return includeLeadingSlash ? "/" + joined : joined;
+        }
+
+        public static string EscapePointerSegment(string segment)
+        {
+            if (segment == null) return string.Empty;
+            return segment.Replace("~", "~0").Replace("/", "~1");
+        }
+
+        private static string UnescapePointerSegment(string segment)
+        {
+            if (segment == null) return string.Empty;
+            return segment.Replace("~1", "/").Replace("~0", "~");
         }
 
         /// <summary>

@@ -1,6 +1,18 @@
 ﻿namespace PLC2MES.Core.Models
 {
-    public enum TokenType { Variable, Operator, LogicalOperator, Value, LeftParen, RightParen, End }
+    public enum TokenType
+    {
+        Variable,
+        Operator,
+        LogicalOperator,
+        Value,
+        LeftParen,
+        RightParen,
+        LeftBracket,
+        RightBracket,
+        Dot,
+        End
+    }
 
     public class Token
     {
