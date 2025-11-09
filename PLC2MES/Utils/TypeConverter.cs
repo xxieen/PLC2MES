@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Globalization;
 using System.Collections;
 using System.Collections.Generic;
@@ -9,10 +9,15 @@ namespace PLC2MES.Utils
 {
     public static class TypeConverter
     {
-        // Convert input (JsonNode, string, IEnumerable, scalar) to CLR value according to targetType and isArray flag.
-        public static object ConvertFromJson(object input, VariableType targetType, bool isArray = false)
+        // Convert input (JsonNode, string, IEnumerable, scalar) to CLR value according to targetType.
+        // If targetType.IsArray==true, element type is targetType.ElementType
+        public static object ConvertFromJson(object input, VariableType targetType)
         {
-            if (input == null) return isArray ? new List<object>() : GetDefaultValue(targetType);
+            if (targetType == null) return input;
+            bool isArray = targetType.IsArray;
+            var elemType = isArray ? targetType.ElementType ?? VariableType.CreateScalar(VariableKind.String) : targetType;
+
+            if (input == null) return isArray ? new List<object>() : GetDefaultValue(elemType);
 
             try
             {
@@ -22,19 +27,17 @@ namespace PLC2MES.Utils
                     if (input is JsonArray ja)
                     {
                         var outList = new List<object>();
-                        foreach (var it in ja) outList.Add(ConvertJsonNodeToClr(it, targetType));
+                        foreach (var it in ja) outList.Add(ConvertJsonNodeToClr(it, elemType));
                         return outList;
                     }
 
-                    // JsonNode that may be array
                     if (input is JsonNode jn && jn is JsonArray jnArr)
                     {
                         var outList = new List<object>();
-                        foreach (var it in jnArr) outList.Add(ConvertJsonNodeToClr(it, targetType));
+                        foreach (var it in jnArr) outList.Add(ConvertJsonNodeToClr(it, elemType));
                         return outList;
                     }
 
-                    // string containing JSON array
                     if (input is string s)
                     {
                         var t = s.Trim();
@@ -44,22 +47,20 @@ namespace PLC2MES.Utils
                             if (parsed != null)
                             {
                                 var outList = new List<object>();
-                                foreach (var it in parsed) outList.Add(ConvertJsonNodeToClr(it, targetType));
+                                foreach (var it in parsed) outList.Add(ConvertJsonNodeToClr(it, elemType));
                                 return outList;
                             }
                         }
                     }
 
-                    // IEnumerable (already a CLR collection)
                     if (input is IEnumerable ie && !(input is string))
                     {
                         var outList = new List<object>();
-                        foreach (var it in ie) outList.Add(ConvertFromJson(it, targetType, false));
+                        foreach (var it in ie) outList.Add(ConvertFromJson(it, elemType));
                         return outList;
                     }
 
-                    // fallback: wrap single
-                    return new List<object> { ConvertFromJson(input, targetType, false) };
+                    return new List<object> { ConvertFromJson(input, elemType) };
                 }
 
                 // Non-array handling
@@ -69,11 +70,11 @@ namespace PLC2MES.Utils
                     if (node is JsonArray ja2)
                     {
                         var outList = new List<object>();
-                        foreach (var it in ja2) outList.Add(ConvertJsonNodeToClr(it, targetType));
+                        foreach (var it in ja2) outList.Add(ConvertJsonNodeToClr(it, elemType));
                         return outList;
                     }
 
-                    return ConvertJsonNodeToClr(node, targetType);
+                    return ConvertJsonNodeToClr(node, elemType);
                 }
 
                 if (input is string str)
@@ -91,18 +92,18 @@ namespace PLC2MES.Utils
                         if (parsed != null)
                         {
                             var outList = new List<object>();
-                            foreach (var it in parsed) outList.Add(ConvertJsonNodeToClr(it, targetType));
+                            foreach (var it in parsed) outList.Add(ConvertJsonNodeToClr(it, elemType));
                             return outList;
                         }
                     }
                 }
 
                 // scalar conversion
-                return ConvertScalarToTarget(input, targetType);
+                return ConvertScalarToTarget(input, elemType);
             }
             catch
             {
-                return isArray ? new List<object>() : GetDefaultValue(targetType);
+                return isArray ? new List<object>() : GetDefaultValue(elemType);
             }
         }
 
@@ -153,7 +154,7 @@ namespace PLC2MES.Utils
                     foreach (var it in arr)
                     {
                         if (it is JsonObject iobj) list.Add(ConvertJsonObjectToDict(iobj));
-                        else if (it is JsonArray iarr) list.Add(ConvertJsonNodeToClr(iarr, VariableType.String));
+                        else if (it is JsonArray iarr) list.Add(ConvertJsonNodeToClr(iarr, VariableType.CreateScalar(VariableKind.String)));
                         else if (it is JsonValue iv)
                         {
                             try { list.Add(iv.GetValue<object>()); } catch { list.Add(iv.ToJsonString()); }
@@ -177,12 +178,13 @@ namespace PLC2MES.Utils
         // Convert scalar input to target CLR type
         private static object ConvertScalarToTarget(object value, VariableType targetType)
         {
+            if (targetType == null) return value;
             if (value == null) return GetDefaultValue(targetType);
             try
             {
-                switch (targetType)
+                switch (targetType.Kind)
                 {
-                    case VariableType.Bool:
+                    case VariableKind.Bool:
                         if (value is bool bb) return bb;
                         if (value is string ss)
                         {
@@ -192,20 +194,20 @@ namespace PLC2MES.Utils
                         if (value is long ln2) return ln2 !=0;
                         if (value is double db2) return Math.Abs(db2) > double.Epsilon;
                         return Convert.ToBoolean(value);
-                    case VariableType.Int:
+                    case VariableKind.Int:
                         if (value is long l) return l;
                         if (value is int i) return (long)i;
                         if (value is double d) return Convert.ToInt64(d);
                         if (value is string sss && long.TryParse(sss, out var rl)) return rl;
                         return Convert.ToInt64(value);
-                    case VariableType.Float:
+                    case VariableKind.Float:
                         if (value is double dd) return dd;
                         if (value is float f) return (double)f;
                         if (value is string sf && double.TryParse(sf, NumberStyles.Any, CultureInfo.InvariantCulture, out var rf)) return rf;
                         return Convert.ToDouble(value);
-                    case VariableType.String:
+                    case VariableKind.String:
                         return value.ToString();
-                    case VariableType.DateTime:
+                    case VariableKind.DateTime:
                         if (value is DateTime dt) return dt;
                         if (value is string sdt && DateTime.TryParse(sdt, out var rd)) return rd;
                         return Convert.ToDateTime(value);
@@ -222,29 +224,31 @@ namespace PLC2MES.Utils
         // Serialize CLR value to JSON text for embedding into templates
         public static string ConvertToJsonString(object value, VariableType type, bool isArray = false)
         {
+            if (type == null) type = VariableType.CreateScalar(VariableKind.String);
             if (value == null) return isArray ? "[]" : "null";
-            if (isArray)
+            if (isArray || (type != null && type.IsArray))
             {
+                var elemType = type.IsArray ? type.ElementType ?? VariableType.CreateScalar(VariableKind.String) : type;
                 if (value is IEnumerable e)
                 {
                     var items = new List<string>();
-                    foreach (var it in e) items.Add(ConvertToJsonString(it, type, false));
+                    foreach (var it in e) items.Add(ConvertToJsonString(it, elemType, false));
                     return "[" + string.Join(",", items) + "]";
                 }
-                return "[" + ConvertToJsonString(value, type, false) + "]";
+                return "[" + ConvertToJsonString(value, elemType, false) + "]";
             }
 
-            switch (type)
+            switch (type.Kind)
             {
-                case VariableType.Bool: return value.ToString().ToLower();
-                case VariableType.Int: return Convert.ToInt64(value).ToString(CultureInfo.InvariantCulture);
-                case VariableType.Float: return Convert.ToDouble(value).ToString(CultureInfo.InvariantCulture);
-                case VariableType.String:
+                case VariableKind.Bool: return value.ToString().ToLower();
+                case VariableKind.Int: return Convert.ToInt64(value).ToString(CultureInfo.InvariantCulture);
+                case VariableKind.Float: return Convert.ToDouble(value).ToString(CultureInfo.InvariantCulture);
+                case VariableKind.String:
                     {
                         var s = value.ToString().Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n").Replace("\r", "\\r").Replace("\t", "\\t");
                         return "\"" + s + "\"";
                     }
-                case VariableType.DateTime:
+                case VariableKind.DateTime:
                     return "\"" + value.ToString() + "\"";
                 default:
                     return "\"" + value.ToString() + "\"";
@@ -253,13 +257,15 @@ namespace PLC2MES.Utils
 
         public static object GetDefaultValue(VariableType type)
         {
-            switch (type)
+            if (type == null) return null;
+            if (type.IsArray) return new List<object>();
+            switch (type.Kind)
             {
-                case VariableType.Bool: return false;
-                case VariableType.Int: return 0L;
-                case VariableType.Float: return 0.0;
-                case VariableType.String: return string.Empty;
-                case VariableType.DateTime: return DateTime.Now;
+                case VariableKind.Bool: return false;
+                case VariableKind.Int: return 0L;
+                case VariableKind.Float: return 0.0;
+                case VariableKind.String: return string.Empty;
+                case VariableKind.DateTime: return DateTime.Now;
                 default: return null;
             }
         }

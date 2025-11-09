@@ -1,4 +1,4 @@
-namespace PLC2MES
+﻿namespace PLC2MES
 {
     internal static class Program
     {
@@ -14,4 +14,4 @@ namespace PLC2MES
             Application.Run(new Form1());
         }
     }
-}
+} 

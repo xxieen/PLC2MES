@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 
 namespace PLC2MES.Core.Models
 {
@@ -10,7 +10,7 @@ namespace PLC2MES.Core.Models
         public List<ResponseMapping> Mappings { get; set; }
         public string OriginalText { get; set; }
 
-        public HttpResponseTemplate()
+        public HttpResponseTemplate()  
         {
             Headers = new Dictionary<string, string>();
             Mappings = new List<ResponseMapping>();

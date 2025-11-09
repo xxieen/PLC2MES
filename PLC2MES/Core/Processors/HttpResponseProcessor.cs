@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -43,7 +43,7 @@ namespace PLC2MES.Core.Processors
             // set or register $StatusCode
             var existing = manager.GetVariable("$StatusCode");
             if (existing != null) manager.SetVariableValue("$StatusCode", response.StatusCode);
-            else manager.RegisterVariable(new Variable("$StatusCode", VariableType.Int, VariableSource.Response) { Value = response.StatusCode });
+            else manager.RegisterVariable(new Variable("$StatusCode", VariableType.CreateScalar(VariableKind.Int), VariableSource.Response) { Value = response.StatusCode });
         }
 
         private void ProcessHeaders(HttpResponseData response, HttpResponseTemplate template, IVariableManager manager)
@@ -109,7 +109,7 @@ namespace PLC2MES.Core.Processors
                                 }
                                 else
                                 {
-                                    var converted = TypeConverter.ConvertFromJson(captured, m.DataType, m.IsArray);
+                                    var converted = TypeConverter.ConvertFromJson(captured, m.DataType);
                                     SetOrRegisterVariable(m.VariableName, m.DataType, converted, manager);
                                 }
                             }
@@ -130,7 +130,7 @@ namespace PLC2MES.Core.Processors
                         {
                             try
                             {
-                                var converted = TypeConverter.ConvertFromJson(hv, m.DataType, m.IsArray);
+                                var converted = TypeConverter.ConvertFromJson(hv, m.DataType);
                                 SetOrRegisterVariable(m.VariableName, m.DataType, converted, manager);
                             }
                             catch (Exception ex)
@@ -180,7 +180,7 @@ namespace PLC2MES.Core.Processors
                     }
                     else
                     {
-                        var converted = TypeConverter.ConvertFromJson(val, m.DataType, m.IsArray);
+                        var converted = TypeConverter.ConvertFromJson(val, m.DataType);
                         SetOrRegisterVariable(m.VariableName, m.DataType, converted, manager);
                     }
                 }
@@ -195,15 +195,26 @@ namespace PLC2MES.Core.Processors
         private void SetOrRegisterVariable(string name, VariableType type, object value, IVariableManager manager)
         {
             var existing = manager.GetVariable(name);
+            // determine if the extracted value is array-like
             bool valueIsArray = value is System.Collections.IEnumerable && !(value is string);
             if (existing != null)
             {
-                existing.IsArray = valueIsArray;
+                // ensure variable type represents array if needed
+                if (valueIsArray && !existing.Type.IsArray)
+                {
+                    existing.Type = VariableType.CreateArray(existing.Type);
+                }
                 manager.SetVariableValue(name, value);
             }
             else
             {
-                var v = new Variable(name, type, VariableSource.Response) { Value = value, IsArray = valueIsArray };
+                // If value is array but provided type is scalar, wrap it
+                var regType = type;
+                if (valueIsArray && !regType.IsArray)
+                {
+                    regType = VariableType.CreateArray(regType);
+                }
+                var v = new Variable(name, regType, VariableSource.Response) { Value = value };
                 manager.RegisterVariable(v);
             }
         }

@@ -1,4 +1,4 @@
-using System;
+ï»¿using System;
 using System.Text;
 using System.Text.RegularExpressions;
 using PLC2MES.Core.Models;
@@ -16,7 +16,7 @@ namespace PLC2MES.Core.Parsers
         public HttpRequestTemplate Parse(string templateText)
         {
             Logger.LogInfo("RequestTemplateParser: Parse called");
-            if (string.IsNullOrWhiteSpace(templateText)) throw new ArgumentException("Ä£°åÎÄ±¾²»ÄÜÎª¿Õ");
+            if (string.IsNullOrWhiteSpace(templateText)) throw new ArgumentException("æ¨¡æ¿æ–‡æœ¬ä¸èƒ½ä¸ºç©º");
             StringHelper.ResetIdCounter();
             var template = new HttpRequestTemplate { OriginalText = templateText };
             string[] parts = SplitHeaderAndBody(templateText);
@@ -43,7 +43,7 @@ namespace PLC2MES.Core.Parsers
         private void ParseHeaderSection(string headerSection, HttpRequestTemplate template)
         {
             var lines = headerSection.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
-            if (lines.Length == 0) throw new Exception("ÇëÇóÄ£°å¸ñÊ½´íÎó£ºÈ±ÉÙÇëÇóĞĞ");
+            if (lines.Length == 0) throw new Exception("è¯·æ±‚æ¨¡æ¿æ ¼å¼é”™è¯¯ï¼šç¼ºå°‘è¯·æ±‚è¡Œ");
             ParseRequestLine(lines[0], template);
             for (int i = 1; i < lines.Length; i++) ParseHeaderLine(lines[i], template);
         }
@@ -51,7 +51,7 @@ namespace PLC2MES.Core.Parsers
         private void ParseRequestLine(string line, HttpRequestTemplate template)
         {
             var m = Regex.Match(line, RegexPatterns.RequestLine);
-            if (!m.Success) throw new Exception($"ÇëÇóĞĞ¸ñÊ½´íÎó: {line}");
+            if (!m.Success) throw new Exception($"è¯·æ±‚è¡Œæ ¼å¼é”™è¯¯: {line}");
             template.Method = m.Groups[1].Value;
             string urlPart = m.Groups[2].Value;
             template.Url = ProcessUrlVariables(urlPart, template);
@@ -64,10 +64,10 @@ namespace PLC2MES.Core.Parsers
             {
                 string varName = match.Groups["var"].Value;
                 string format = match.Groups["format"].Success ? match.Groups["format"].Value : null;
-                var expression = new TemplateExpression { Id = StringHelper.GenerateUniqueId(), VariableName = varName, DataType = null, FormatString = format, OriginalText = match.Value, Location = ExpressionLocation.Url };
+                var expression = new TemplateExpression { Id = StringHelper.GenerateUniqueId(), VariableName = varName, DataType = VariableType.CreateScalar(VariableKind.String), FormatString = format, OriginalText = match.Value, Location = ExpressionLocation.Url };
                 template.Expressions.Add(expression);
                 // register variable as string for URL
-                _vars.RegisterVariable(new Variable(varName, VariableType.String, VariableSource.Request, format));
+                _vars.RegisterVariable(new Variable(varName, VariableType.CreateScalar(VariableKind.String), VariableSource.Request, format));
                 return match.Value;
             });
         }
@@ -88,9 +88,9 @@ namespace PLC2MES.Core.Parsers
             {
                 string varName = match.Groups["var"].Value;
                 string format = match.Groups["format"].Success ? match.Groups["format"].Value : null;
-                var expression = new TemplateExpression { Id = StringHelper.GenerateUniqueId(), VariableName = varName, DataType = null, FormatString = format, OriginalText = match.Value, Location = ExpressionLocation.Header };
+                var expression = new TemplateExpression { Id = StringHelper.GenerateUniqueId(), VariableName = varName, DataType = VariableType.CreateScalar(VariableKind.String), FormatString = format, OriginalText = match.Value, Location = ExpressionLocation.Header };
                 template.Expressions.Add(expression);
-                _vars.RegisterVariable(new Variable(varName, VariableType.String, VariableSource.Request, format));
+                _vars.RegisterVariable(new Variable(varName, VariableType.CreateScalar(VariableKind.String), VariableSource.Request, format));
                 return match.Value;
             });
         }
@@ -111,14 +111,14 @@ namespace PLC2MES.Core.Parsers
                 string format = match.Groups["format"].Success ? match.Groups["format"].Value : null;
 
                 bool isArray;
-                VariableType varType = ParseVariableType(typeStr, out isArray);
+                var elemKindType = ParseVariableType(typeStr, out isArray);
+                VariableType varType = isArray ? VariableType.CreateArray(VariableType.CreateScalar(elemKindType)) : VariableType.CreateScalar(elemKindType);
 
-                var expression = new TemplateExpression { Id = StringHelper.GenerateUniqueId(), VariableName = varName, DataType = varType, IsArray = isArray, FormatString = format, OriginalText = match.Value, Location = ExpressionLocation.Body };
+                var expression = new TemplateExpression { Id = StringHelper.GenerateUniqueId(), VariableName = varName, DataType = isArray ? varType.ElementType : varType, FormatString = format, OriginalText = match.Value, Location = ExpressionLocation.Body };
                 template.Expressions.Add(expression);
 
-                // register variable: create variable object and set IsArray/value correctly
-                var variable = new Variable(varName, varType, VariableSource.Request, format) { IsArray = isArray };
-                if (isArray) variable.Value = new List<object>();
+                // register variable: use VariableType (array or scalar)
+                var variable = new Variable(varName, varType, VariableSource.Request, format);
                 _vars.RegisterVariable(variable);
 
                 // For arrays we must not quote the placeholder (so replacement will produce a JSON array later)
@@ -129,10 +129,10 @@ namespace PLC2MES.Core.Parsers
             });
         }
 
-        private VariableType ParseVariableType(string typeStr, out bool isArray)
+        private VariableKind ParseVariableType(string typeStr, out bool isArray)
         {
             isArray = false;
-            if (string.IsNullOrEmpty(typeStr)) return VariableType.String;
+            if (string.IsNullOrEmpty(typeStr)) return VariableKind.String;
 
             // support Array<Elem> or Elem[]
             var s = typeStr.Trim();
@@ -149,13 +149,13 @@ namespace PLC2MES.Core.Parsers
 
             switch (s.ToLower())
             {
-                case "bool": return VariableType.Bool;
+                case "bool": return VariableKind.Bool;
                 case "int":
-                case "number": return VariableType.Int;
-                case "float": return VariableType.Float;
-                case "string": return VariableType.String;
-                case "datetime": return VariableType.DateTime;
-                default: throw new Exception($"²»Ö§³ÖµÄÊı¾İÀàĞÍ: {typeStr}");
+                case "number": return VariableKind.Int;
+                case "float": return VariableKind.Float;
+                case "string": return VariableKind.String;
+                case "datetime": return VariableKind.DateTime;
+                default: throw new Exception($"ä¸æ”¯æŒçš„æ•°æ®ç±»å‹: {typeStr}");
             }
         }
     }

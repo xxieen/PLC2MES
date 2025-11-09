@@ -1,4 +1,4 @@
-using System;
+ï»¿using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using PLC2MES.Core.Models;
@@ -12,7 +12,7 @@ namespace PLC2MES.Core.Parsers
 
         public ConditionNode Parse(string expression)
         {
-            if (string.IsNullOrWhiteSpace(expression)) throw new ArgumentException("±í´ïÊ½²»ÄÜÎª¿Õ");
+            if (string.IsNullOrWhiteSpace(expression)) throw new ArgumentException("è¡¨è¾¾å¼ä¸èƒ½ä¸ºç©º");
             _tokens = Tokenize(expression);
             _position = 0;
             return ParseOrExpression();
@@ -86,11 +86,11 @@ namespace PLC2MES.Core.Parsers
         private ConditionNode ParseComparisonExpression()
         {
             if (CurrentToken().Type == TokenType.LeftParen) { Consume(); var node = ParseOrExpression(); if (CurrentToken().Type == TokenType.RightParen) Consume(); return node; }
-            if (CurrentToken().Type != TokenType.Variable) throw new Exception($"ÆÚÍû±äÁ¿£¬µ«µÃµ½: {CurrentToken().Value}");
+            if (CurrentToken().Type != TokenType.Variable) throw new Exception($"æœŸæœ›å˜é‡ï¼Œä½†å¾—åˆ°: {CurrentToken().Value}");
             string variableName = CurrentToken().Value; Consume();
             if (CurrentToken().Type == TokenType.Operator)
             {
-                string op = CurrentToken().Value; Consume(); if (CurrentToken().Type != TokenType.Value) throw new Exception($"ÆÚÍûÖµ£¬µ«µÃµ½: {CurrentToken().Value}"); string valueStr = CurrentToken().Value; Consume();
+                string op = CurrentToken().Value; Consume(); if (CurrentToken().Type != TokenType.Value) throw new Exception($"æœŸæœ›å€¼ï¼Œä½†å¾—åˆ°: {CurrentToken().Value}"); string valueStr = CurrentToken().Value; Consume();
                 return new ComparisonNode { VariableName = variableName, Operator = ParseComparisonOperator(op), CompareValue = ParseValue(valueStr) };
             }
             else
@@ -109,7 +109,7 @@ namespace PLC2MES.Core.Parsers
                 ">=" => ComparisonOperator.GreaterOrEqual,
                 "<=" => ComparisonOperator.LessOrEqual,
                 "like" => ComparisonOperator.Like,
-                _ => throw new Exception($"Î´ÖªµÄ±È½ÏÔËËã·û: {op}"),
+                _ => throw new Exception($"æœªçŸ¥çš„æ¯”è¾ƒè¿ç®—ç¬¦: {op}"),
             };
         }
 

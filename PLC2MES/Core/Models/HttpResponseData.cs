@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 
 namespace PLC2MES.Core.Models
 {
@@ -17,3 +17,4 @@ namespace PLC2MES.Core.Models
         }
     }
 }
+ 

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
@@ -91,19 +91,21 @@ namespace PLC2MES.Core.Processors
         {
             var replacements = new Dictionary<string, string>();
             var bodyExpressions = expressions.FindAll(e => e.Location == ExpressionLocation.Body);
+            
             foreach (var expression in bodyExpressions)
             {
                 if (variables.ContainsKey(expression.VariableName))
                 {
-                    var variable = variables[expression.VariableName];
-                    string jsonValue = TypeConverter.ConvertToJsonString(variable.Value, variable.Type, expression.IsArray);
+                    Variable variable = variables[expression.VariableName];
+                    // If variable.Type is array, pass the VariableType instance which may be array
+                    string jsonValue = TypeConverter.ConvertToJsonString(variable.Value, variable.Type);
                     replacements[expression.Id] = jsonValue;
                 }
                 else
                 {
-                    var def = TypeConverter.GetDefaultValue(expression.DataType.Value);
-                    // if array expected, wrap default into array JSON
-                    string jsonValue = TypeConverter.ConvertToJsonString(def, expression.DataType.Value, expression.IsArray);
+                    // variable not registered -> use default from expression.DataType
+                    var dtype = expression.DataType ?? VariableType.CreateScalar(VariableKind.String);
+                    string jsonValue = TypeConverter.ConvertToJsonString(TypeConverter.GetDefaultValue(dtype), dtype);
                     replacements[expression.Id] = jsonValue;
                 }
             }
@@ -176,4 +178,4 @@ namespace PLC2MES.Core.Processors
             return response;
         }
     }
-}
+}                                                                                            

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 namespace PLC2MES.Core.Models
@@ -8,7 +8,7 @@ namespace PLC2MES.Core.Models
         public bool Success { get; set; }
         public int StatusCode { get; set; }
         public string RequestText { get; set; }
-        public string ResponseText { get; set; }
+        public string ResponseText { get; set; } 
         public Dictionary<string, Variable> ExtractedVariables { get; set; }
         public bool? SuccessCriteriaResult { get; set; }
         public string SuccessCriteriaDetail { get; set; }

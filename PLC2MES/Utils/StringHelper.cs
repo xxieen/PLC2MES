@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 
 namespace PLC2MES.Utils
 {
@@ -13,7 +13,7 @@ namespace PLC2MES.Utils
 
         public static void ResetIdCounter()
         {
-            _counter = 0;
+            _counter = 0; 
         }
 
         public static string CreatePlaceholder(string id)

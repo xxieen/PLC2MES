@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using PLC2MES.Core.Models;
@@ -66,14 +66,14 @@ namespace PLC2MES.Core.Services
             foreach (var v in GetRequestVariables())
             {
                 if (v.Value == null) return false;
-                if (v.Type == VariableType.String && string.IsNullOrEmpty(v.Value.ToString())) return false;
+                if (v.Type != null && !v.Type.IsArray && v.Type.Kind == VariableKind.String && string.IsNullOrEmpty(v.Value.ToString())) return false;
             }
             return true;
         }
-
+         
         public List<string> GetUnsetVariableNames()
         {
-            return GetRequestVariables().Where(v => v.Value == null || (v.Type == VariableType.String && string.IsNullOrEmpty(v.Value.ToString()))).Select(v => v.Name).ToList();
+            return GetRequestVariables().Where(v => v.Value == null || (v.Type != null && !v.Type.IsArray && v.Type.Kind == VariableKind.String && string.IsNullOrEmpty(v.Value.ToString()))).Select(v => v.Name).ToList();
         }
 
         public void Clear()

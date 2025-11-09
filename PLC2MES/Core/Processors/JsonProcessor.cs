@@ -1,4 +1,4 @@
-using System;
+Ôªøusing System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -21,7 +21,7 @@ namespace PLC2MES.Core.Processors
             }
             catch (Exception ex)
             {
-                throw new Exception($"JSONΩ‚Œˆ ß∞‹: {ex.Message}");
+                throw new Exception($"JSONËß£ÊûêÂ§±Ë¥•: {ex.Message}");
             }
         }
 
@@ -173,4 +173,4 @@ namespace PLC2MES.Core.Processors
             }
         }
     }
-}
+} 

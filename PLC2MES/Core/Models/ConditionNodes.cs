@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using PLC2MES.Core.Models;
 
@@ -69,17 +69,18 @@ namespace PLC2MES.Core.Models
 
         private bool CompareEqual(object value, object compareValue, VariableType type)
         {
-            switch (type)
+            if (type == null) return false;
+            switch (type.Kind)
             {
-                case VariableType.Bool:
+                case VariableKind.Bool:
                     return Convert.ToBoolean(value) == Convert.ToBoolean(compareValue);
-                case VariableType.Int:
+                case VariableKind.Int:
                     return Convert.ToInt64(value) == Convert.ToInt64(compareValue);
-                case VariableType.Float:
-                    return Math.Abs(Convert.ToDouble(value) - Convert.ToDouble(compareValue)) < 0.000001;
-                case VariableType.String:
+                case VariableKind.Float:
+                    return Math.Abs(Convert.ToDouble(value) - Convert.ToDouble(compareValue)) <0.000001;
+                case VariableKind.String:
                     return value.ToString() == compareValue.ToString();
-                case VariableType.DateTime:
+                case VariableKind.DateTime:
                     return Convert.ToDateTime(value) == Convert.ToDateTime(compareValue);
                 default:
                     return false;
@@ -88,16 +89,17 @@ namespace PLC2MES.Core.Models
 
         private bool CompareGreaterThan(object value, object compareValue, VariableType type)
         {
-            switch (type)
+            if (type == null) return false;
+            switch (type.Kind)
             {
-                case VariableType.Int:
+                case VariableKind.Int:
                     return Convert.ToInt64(value) > Convert.ToInt64(compareValue);
-                case VariableType.Float:
+                case VariableKind.Float:
                     return Convert.ToDouble(value) > Convert.ToDouble(compareValue);
-                case VariableType.DateTime:
+                case VariableKind.DateTime:
                     return Convert.ToDateTime(value) > Convert.ToDateTime(compareValue);
-                case VariableType.String:
-                    return string.Compare(value.ToString(), compareValue.ToString(), StringComparison.Ordinal) > 0;
+                case VariableKind.String:
+                    return string.Compare(value.ToString(), compareValue.ToString(), StringComparison.Ordinal) >0;
                 default:
                     return false;
             }
@@ -105,16 +107,17 @@ namespace PLC2MES.Core.Models
 
         private bool CompareLessThan(object value, object compareValue, VariableType type)
         {
-            switch (type)
+            if (type == null) return false;
+            switch (type.Kind)
             {
-                case VariableType.Int:
+                case VariableKind.Int:
                     return Convert.ToInt64(value) < Convert.ToInt64(compareValue);
-                case VariableType.Float:
+                case VariableKind.Float:
                     return Convert.ToDouble(value) < Convert.ToDouble(compareValue);
-                case VariableType.DateTime:
+                case VariableKind.DateTime:
                     return Convert.ToDateTime(value) < Convert.ToDateTime(compareValue);
-                case VariableType.String:
-                    return string.Compare(value.ToString(), compareValue.ToString(), StringComparison.Ordinal) < 0;
+                case VariableKind.String:
+                    return string.Compare(value.ToString(), compareValue.ToString(), StringComparison.Ordinal) <0;
                 default:
                     return false;
             }
@@ -126,12 +129,12 @@ namespace PLC2MES.Core.Models
             string pattern = compareValue.ToString();
             if (pattern.StartsWith("%") && pattern.EndsWith("%"))
             {
-                var inner = pattern.Substring(1, pattern.Length - 2);
+                var inner = pattern.Substring(1, pattern.Length -2);
                 return str.Contains(inner);
             }
             if (pattern.EndsWith("%"))
             {
-                var prefix = pattern.Substring(0, pattern.Length - 1);
+                var prefix = pattern.Substring(0, pattern.Length -1);
                 return str.StartsWith(prefix);
             }
             if (pattern.StartsWith("%"))
@@ -153,7 +156,7 @@ namespace PLC2MES.Core.Models
         {
             if (!variables.ContainsKey(VariableName)) return false;
             var variable = variables[VariableName];
-            if (variable.Type == VariableType.Bool)
+            if (variable.Type != null && variable.Type.Kind == VariableKind.Bool)
                 return Convert.ToBoolean(variable.Value);
             return false;
         }

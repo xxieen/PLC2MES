@@ -1,4 +1,4 @@
-using System;
+锘縰sing System;
 using System.Collections.Generic;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -23,7 +23,7 @@ namespace PLC2MES.Core.Parsers
         public HttpResponseTemplate Parse(string templateText)
         {
             Logger.LogInfo("ResponseTemplateParser: Parse called");
-            if (string.IsNullOrWhiteSpace(templateText)) throw new ArgumentException("响应模板文本不能为空");
+            if (string.IsNullOrWhiteSpace(templateText)) throw new ArgumentException("鍝嶅簲妯℃澘鏂囨湰涓嶈兘涓虹┖");
             var template = new HttpResponseTemplate { OriginalText = templateText };
             string[] parts = SplitHeaderAndBody(templateText);
             string headerSection = parts[0];
@@ -49,7 +49,7 @@ namespace PLC2MES.Core.Parsers
         private void ParseHeaderSection(string headerSection, HttpResponseTemplate template)
         {
             var lines = headerSection.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
-            if (lines.Length == 0) throw new Exception("响应模板格式错误：缺少状态行");
+            if (lines.Length == 0) throw new Exception("鍝嶅簲妯℃澘鏍煎紡閿欒锛氱己灏戠姸鎬佽");
             ParseStatusLine(lines[0], template);
             for (int i = 1; i < lines.Length; i++) ParseHeaderLine(lines[i], template);
         }
@@ -84,12 +84,12 @@ namespace PLC2MES.Core.Parsers
                             Id = StringHelper.GenerateUniqueId(),
                             HeaderName = key,
                             VariableName = varName,
-                            DataType = VariableType.String,
+                            DataType = VariableType.CreateScalar(VariableKind.String),
                             HeaderGroupIndex = 1,
                             HeaderRegex = "^(.+?)$"
                         };
                         template.Mappings.Add(mapping);
-                        _vars.RegisterVariable(new Variable(varName, VariableType.String, VariableSource.Response));
+                        _vars.RegisterVariable(new Variable(varName, VariableType.CreateScalar(VariableKind.String), VariableSource.Response));
                     }
                     return;
                 }
@@ -114,9 +114,9 @@ namespace PLC2MES.Core.Parsers
                     // extract placeholder info via named groups
                     string varName = match.Groups["var"].Value;
                     string typeStr = match.Groups["type"].Success ? match.Groups["type"].Value : null;
-                    bool isArray = false;
-                    VariableType dataType = VariableType.String;
-                    if (!string.IsNullOrEmpty(typeStr)) dataType = ParseVariableType(typeStr, out isArray);
+
+                    VariableType dataType = VariableType.CreateScalar(VariableKind.String);
+                    if (!string.IsNullOrEmpty(typeStr)) dataType = ParseVariableType(typeStr);
 
                     // create temp mapping referencing the group index
                     var map = new ResponseMapping
@@ -125,8 +125,7 @@ namespace PLC2MES.Core.Parsers
                         HeaderName = key,
                         HeaderGroupIndex = groupIndex,
                         VariableName = varName,
-                        DataType = dataType,
-                        IsArray = isArray
+                        DataType = dataType
                     };
                     tempMappings.Add(map);
 
@@ -148,8 +147,9 @@ namespace PLC2MES.Core.Parsers
                 {
                     map.HeaderRegex = finalPattern;
                     template.Mappings.Add(map);
-                    var v = new Variable(map.VariableName, map.DataType, VariableSource.Response) { IsArray = map.IsArray };
-                    if (map.IsArray) v.Value = new System.Collections.Generic.List<object>();
+
+                    // Register variable: if mapping.DataType is array type, Variable constructor will set default accordingly
+                    var v = new Variable(map.VariableName, map.DataType, VariableSource.Response);
                     _vars.RegisterVariable(v);
                 }
             }
@@ -169,14 +169,16 @@ namespace PLC2MES.Core.Parsers
                 string typeStr = match.Groups["type"].Success ? match.Groups["type"].Value : null;
                 string varName = match.Groups["var"].Value;
                 string format = match.Groups["format"].Success ? match.Groups["format"].Value : null;
-                bool isArray = false;
-                VariableType varType = string.IsNullOrEmpty(typeStr) ? VariableType.String : ParseVariableType(typeStr, out isArray);
-                var expr = new TemplateExpression { Id = StringHelper.GenerateUniqueId(), VariableName = varName, DataType = varType, IsArray = isArray, FormatString = format, OriginalText = match.Value, Location = ExpressionLocation.Body };
+
+                VariableType varType = string.IsNullOrEmpty(typeStr) ? VariableType.CreateScalar(VariableKind.String) : ParseVariableType(typeStr);
+
+                var expr = new TemplateExpression { Id = StringHelper.GenerateUniqueId(), VariableName = varName, DataType = varType, FormatString = format, OriginalText = match.Value, Location = ExpressionLocation.Body };
                 expressions.Add(expr);
-                var v = new Variable(varName, varType, VariableSource.Response) { IsArray = isArray };
-                if (isArray) v.Value = new System.Collections.Generic.List<object>();
+
+                var v = new Variable(varName, varType, VariableSource.Response);
                 _vars.RegisterVariable(v);
-                return isArray ? StringHelper.CreatePlaceholder(expr.Id) : "\"" + StringHelper.CreatePlaceholder(expr.Id) + "\"";
+
+                return varType.IsArray ? StringHelper.CreatePlaceholder(expr.Id) : "\"" + StringHelper.CreatePlaceholder(expr.Id) + "\"";
             });
             template.BodyTemplate = processed;
 
@@ -196,9 +198,9 @@ namespace PLC2MES.Core.Parsers
                                 var expression = expressions.Find(e => e.Id == id);
                                 if (expression != null)
                                 {
-                                    var mapping = new ResponseMapping { Id = id, JsonPointer = path, VariableName = expression.VariableName, DataType = expression.DataType.Value, IsArray = expression.IsArray };
+                                    var mapping = new ResponseMapping { Id = id, JsonPointer = path, VariableName = expression.VariableName, DataType = expression.DataType };
                                     template.Mappings.Add(mapping);
-                                    _vars.RegisterVariable(new Variable(expression.VariableName, expression.DataType.Value, VariableSource.Response));
+                                    _vars.RegisterVariable(new Variable(expression.VariableName, expression.DataType, VariableSource.Response));
                                 }
                             }
                         }
@@ -212,44 +214,48 @@ namespace PLC2MES.Core.Parsers
             catch (Exception ex)
             {
                 Logger.LogError("ResponseTemplateParser: ParseBodySection failed", ex);
-                throw new Exception($"响应Body JSON解析失败: {ex.Message}");
+                throw new Exception($"鍝嶅簲Body JSON瑙ｆ瀽澶辫触: {ex.Message}");
             }
+        }
+
+        private VariableType ParseVariableType(string typeStr)
+        {
+            bool dummy;
+            return ParseVariableType(typeStr, out dummy);
         }
 
         private VariableType ParseVariableType(string typeStr, out bool isArray)
         {
             isArray = false;
-            if (string.IsNullOrEmpty(typeStr)) return VariableType.String;
+            if (string.IsNullOrEmpty(typeStr)) return VariableType.CreateScalar(VariableKind.String);
 
             var s = typeStr.Trim();
             if (s.EndsWith("[]"))
             {
                 isArray = true;
-                s = s.Substring(0, s.Length -2);
+                s = s.Substring(0, s.Length - 2);
             }
             else if (s.StartsWith("Array<") && s.EndsWith(">"))
             {
                 isArray = true;
-                s = s.Substring(6, s.Length -7);
+                s = s.Substring(6, s.Length - 7);
             }
 
+            VariableKind kind;
             switch (s.ToLower())
             {
-                case "bool": return VariableType.Bool;
+                case "bool": kind = VariableKind.Bool; break;
                 case "int":
-                case "number": return VariableType.Int;
-                case "float": return VariableType.Float;
-                case "string": return VariableType.String;
-                case "datetime": return VariableType.DateTime;
-                default: throw new Exception($"不支持的数据类型: {typeStr}");
+                case "number": kind = VariableKind.Int; break;
+                case "float": kind = VariableKind.Float; break;
+                case "string": kind = VariableKind.String; break;
+                case "datetime": kind = VariableKind.DateTime; break;
+                default: throw new Exception($"涓嶆敮鎸佺殑鏁版嵁绫诲瀷: {typeStr}");
             }
-        }
 
-        // keep existing single-parameter overload for compatibility
-        private VariableType ParseVariableType(string typeStr)
-        {
-            bool dummy;
-            return ParseVariableType(typeStr, out dummy);
+            var scalar = VariableType.CreateScalar(kind);
+            if (isArray) return VariableType.CreateArray(scalar);
+            return scalar;
         }
     }
 }

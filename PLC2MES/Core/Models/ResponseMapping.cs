@@ -1,4 +1,4 @@
-namespace PLC2MES.Core.Models
+﻿namespace PLC2MES.Core.Models
 {
     public class ResponseMapping
     {
@@ -12,7 +12,8 @@ namespace PLC2MES.Core.Models
         public string HeaderRegex { get; set; }
         //1-based index of capture group within HeaderRegex that contains this mapping's value
         public int HeaderGroupIndex { get; set; }
-        // Whether this mapping expects an array of values
-        public bool IsArray { get; set; }
+        
+        // compatibility: whether mapping expects an array (can be inferred from DataType)
+        public bool IsArray => DataType != null && DataType.IsArray;
     }
 }

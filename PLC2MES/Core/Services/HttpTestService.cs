@@ -1,4 +1,4 @@
-using System;
+ï»¿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading.Tasks;
@@ -41,7 +41,7 @@ namespace PLC2MES.Core.Services
         public void LoadResponseTemplate(string templateText)
         {
             _response_template = _response_parser.Parse(templateText);
-        }
+        } 
 
         public void LoadSuccessCriteria(string expression)
         {
@@ -54,10 +54,10 @@ namespace PLC2MES.Core.Services
         public ValidationResult ValidateBeforeExecution()
         {
             var r = new ValidationResult { IsValid = true };
-            if (_requestTemplate == null) { r.IsValid = false; r.ErrorMessages.Add("Î´¼ÓÔØÇëÇóÄ£°å"); }
-            if (_response_template == null) { r.IsValid = false; r.ErrorMessages.Add("Î´¼ÓÔØÏìÓ¦Ä£°å"); }
-            if (string.IsNullOrWhiteSpace(_baseUrl)) { r.IsValid = false; r.ErrorMessages.Add("Î´ÉèÖÃ»ù´¡URL"); }
-            if (!_variableManager.AreAllRequestVariablesSet()) { r.IsValid = false; r.ErrorMessages.Add("´æÔÚÎ´¸³ÖµµÄÇëÇó±äÁ¿"); }
+            if (_requestTemplate == null) { r.IsValid = false; r.ErrorMessages.Add("æœªåŠ è½½è¯·æ±‚æ¨¡æ¿"); }
+            if (_response_template == null) { r.IsValid = false; r.ErrorMessages.Add("æœªåŠ è½½å“åº”æ¨¡æ¿"); }
+            if (string.IsNullOrWhiteSpace(_baseUrl)) { r.IsValid = false; r.ErrorMessages.Add("æœªè®¾ç½®åŸºç¡€URL"); }
+            if (!_variableManager.AreAllRequestVariablesSet()) { r.IsValid = false; r.ErrorMessages.Add("å­˜åœ¨æœªèµ‹å€¼çš„è¯·æ±‚å˜é‡"); }
             return r;
         }
 
@@ -91,9 +91,9 @@ namespace PLC2MES.Core.Services
         private string BuildCriteriaDetail(bool result)
         {
             var sb = new System.Text.StringBuilder();
-            sb.AppendLine($"³É¹¦Ìõ¼şÆÀ¹À½á¹û: {(result ? "Í¨¹ı" : "Ê§°Ü")}");
+            sb.AppendLine($"æˆåŠŸæ¡ä»¶è¯„ä¼°ç»“æœ: {(result ? "é€šè¿‡" : "å¤±è´¥")}");
             sb.AppendLine();
-            sb.AppendLine("±äÁ¿Öµ:");
+            sb.AppendLine("å˜é‡å€¼:");
             foreach (var v in _variableManager.GetAllVariables().Values) sb.AppendLine($" {v.Name} = {v.Value} ({v.Type})");
             return sb.ToString();
         }

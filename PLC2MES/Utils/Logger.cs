@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Text;
 
@@ -15,7 +15,7 @@ namespace PLC2MES.Utils
  }
 
  public static void LogError(string message, Exception ex = null)
- {
+ { 
  Write("ERROR", message, ex);
  }
 

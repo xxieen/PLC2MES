@@ -1,19 +1,49 @@
-namespace PLC2MES.Core.Models
+ï»¿namespace PLC2MES.Core.Models
 {
     /// <summary>
-    ///±äÁ¿Êı¾İÀàĞÍ
+    /// åŸºæœ¬å˜é‡ç§ç±»ï¼ˆä¸å«æ•°ç»„å°è£…ï¼‰
     /// </summary>
-    public enum VariableType
+    public enum VariableKind
     {
         Bool,
         Int,
         Float,
         String,
-        DateTime
+        DateTime,
+        Array // marker for array wrapper when used as VariableType.Kind
     }
 
     /// <summary>
-    ///±äÁ¿À´Ô´
+    ///å˜é‡ç±»å‹æè¿°ã€‚ç”¨äºæ›¿ä»£åŸæ¥çš„æšä¸¾ï¼Œæ”¯æŒæ•°ç»„åµŒå¥—ï¼ˆElementTypeï¼‰
+    /// ä½¿ç”¨æ–¹å¼ï¼š
+    /// - æ ‡é‡ï¼š new VariableType(VariableKind.String)
+    /// - æ•°ç»„ï¼š VariableType.CreateArray(new VariableType(VariableKind.Int))
+    /// </summary>
+    public class VariableType
+    {
+        public VariableKind Kind { get; }
+        public VariableType ElementType { get; }
+
+        public bool IsArray => Kind == VariableKind.Array;
+
+        public VariableType(VariableKind kind, VariableType elementType = null)
+        {
+            Kind = kind;
+            ElementType = elementType;
+        }
+
+        public static VariableType CreateScalar(VariableKind kind) => new VariableType(kind, null);
+        public static VariableType CreateArray(VariableType elemType) => new VariableType(VariableKind.Array, elemType);
+
+        public override string ToString()
+        {
+            if (IsArray) return $"Array<{ElementType}>";
+            return Kind.ToString();
+        }
+    }
+
+    /// <summary>
+    ///å˜é‡æ¥æº
     /// </summary>
     public enum VariableSource
     {
@@ -22,7 +52,7 @@ namespace PLC2MES.Core.Models
     }
 
     /// <summary>
-    /// ±í´ïÊ½Î»ÖÃ
+    /// è¡¨è¾¾å¼ä½ç½®
     /// </summary>
     public enum ExpressionLocation
     {
@@ -32,7 +62,7 @@ namespace PLC2MES.Core.Models
     }
 
     /// <summary>
-    ///Âß¼­ÔËËã·û
+    ///é€»è¾‘è¿ç®—ç¬¦
     /// </summary>
     public enum LogicalOperator
     {
@@ -41,7 +71,7 @@ namespace PLC2MES.Core.Models
     }
 
     /// <summary>
-    /// ±È½ÏÔËËã·û
+    /// æ¯”è¾ƒè¿ç®—ç¬¦
     /// </summary>
     public enum ComparisonOperator
     {

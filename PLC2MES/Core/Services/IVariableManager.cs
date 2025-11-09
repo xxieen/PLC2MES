@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using PLC2MES.Core.Models;
 
@@ -10,7 +10,7 @@ namespace PLC2MES.Core.Services
         public object OldValue { get; set; }
         public object NewValue { get; set; }
     }
-
+     
     public interface IVariableManager
     {
         event EventHandler<VariableChangedEventArgs> VariableChanged;

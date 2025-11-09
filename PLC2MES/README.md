@@ -21,7 +21,7 @@
  ```bash
  dotnet build
  dotnet run --project PLC2MES/PLC2MES.csproj
- ```
+ ``` 
  - 或在 Visual Studio 中打开解决方案并运行。
 
 3. 使用方法（快速演示）

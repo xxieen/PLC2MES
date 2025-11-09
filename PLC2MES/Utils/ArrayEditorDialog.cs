@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Windows.Forms;
 
 namespace PLC2MES.Utils
@@ -16,7 +16,7 @@ namespace PLC2MES.Utils
  form.Text = "Edit Array";
  form.StartPosition = FormStartPosition.CenterParent;
  form.Width =600;
- form.Height =400;
+ form.Height =400; 
  form.FormBorderStyle = FormBorderStyle.FixedDialog;
  form.MinimizeBox = false;
  form.MaximizeBox = false;

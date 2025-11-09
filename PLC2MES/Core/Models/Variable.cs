@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using PLC2MES.Utils;
 
@@ -12,9 +12,6 @@ namespace PLC2MES.Core.Models
         public string FormatString { get; set; }
         public VariableSource Source { get; set; }
 
-        // Whether this variable represents an array of elements of 'Type'
-        public bool IsArray { get; set; }
-
         // User-configurable default value (used when extraction fails)
         public bool HasUserDefault { get; private set; }
         public object UserDefaultValue { get; private set; }
@@ -24,10 +21,9 @@ namespace PLC2MES.Core.Models
         public Variable(string name, VariableType type, VariableSource source, string formatString = null)
         {
             Name = name;
-            Type = type;
+            Type = type ?? throw new ArgumentNullException(nameof(type));
             Source = source;
             FormatString = formatString;
-            IsArray = false;
             Value = GetDefaultValue(type);
             HasUserDefault = false;
             UserDefaultValue = null;
@@ -35,20 +31,18 @@ namespace PLC2MES.Core.Models
 
         private object GetDefaultValue(VariableType type)
         {
-            switch (type)
+            if (type == null) return null;
+            // arrays default to empty list
+            if (type.IsArray) return new List<object>();
+
+            switch (type.Kind)
             {
-                case VariableType.Bool:
-                    return false;
-                case VariableType.Int:
-                    return 0;
-                case VariableType.Float:
-                    return 0.0;
-                case VariableType.String:
-                    return string.Empty;
-                case VariableType.DateTime:
-                    return DateTime.Now;
-                default:
-                    return null;
+                case VariableKind.Bool: return false;
+                case VariableKind.Int: return 0L;
+                case VariableKind.Float: return 0.0;
+                case VariableKind.String: return string.Empty;
+                case VariableKind.DateTime: return DateTime.Now;
+                default: return null;
             }
         }
 
@@ -57,19 +51,19 @@ namespace PLC2MES.Core.Models
             if (Value == null)
                 return string.Empty;
 
-            if (IsArray)
+            if (Type != null && Type.IsArray)
             {
-                // represent array as JSON-like string
-                return TypeConverter.ConvertToJsonString(Value, Type, true);
+                // represent array as JSON-like string; element type used for formatting
+                return TypeConverter.ConvertToJsonString(Value, Type.ElementType ?? VariableType.CreateScalar(VariableKind.String), true);
             }
 
-            if (Type == VariableType.DateTime && !string.IsNullOrEmpty(FormatString))
+            if (Type != null && Type.Kind == VariableKind.DateTime && !string.IsNullOrEmpty(FormatString))
             {
                 if (Value is DateTime dt)
                     return dt.ToString(FormatString);
             }
 
-            if (Type == VariableType.Bool)
+            if (Type != null && Type.Kind == VariableKind.Bool)
             {
                 return Value.ToString().ToLower();
             }
@@ -81,28 +75,29 @@ namespace PLC2MES.Core.Models
         {
             try
             {
-                if (IsArray)
+                if (Type != null && Type.IsArray)
                 {
-                    var converted = TypeConverter.ConvertFromJson(valueString, Type, true);
+                    var converted = TypeConverter.ConvertFromJson(valueString, Type.ElementType ?? VariableType.CreateScalar(VariableKind.String));
                     Value = converted;
                     return true;
                 }
 
-                switch (Type)
+                var t = Type ?? VariableType.CreateScalar(VariableKind.String);
+                switch (t.Kind)
                 {
-                    case VariableType.Bool:
+                    case VariableKind.Bool:
                         Value = bool.Parse(valueString);
                         return true;
-                    case VariableType.Int:
-                        Value = int.Parse(valueString);
+                    case VariableKind.Int:
+                        Value = Convert.ToInt64(valueString);
                         return true;
-                    case VariableType.Float:
+                    case VariableKind.Float:
                         Value = double.Parse(valueString);
                         return true;
-                    case VariableType.String:
+                    case VariableKind.String:
                         Value = valueString;
                         return true;
-                    case VariableType.DateTime:
+                    case VariableKind.DateTime:
                         Value = DateTime.Parse(valueString);
                         return true;
                     default:
@@ -120,30 +115,31 @@ namespace PLC2MES.Core.Models
         {
             try
             {
-                if (IsArray)
+                if (Type != null && Type.IsArray)
                 {
-                    var converted = TypeConverter.ConvertFromJson(valueString, Type, true);
+                    var converted = TypeConverter.ConvertFromJson(valueString, Type.ElementType ?? VariableType.CreateScalar(VariableKind.String));
                     HasUserDefault = true;
                     UserDefaultValue = converted;
                     return true;
                 }
 
                 object parsed = null;
-                switch (Type)
+                var t = Type ?? VariableType.CreateScalar(VariableKind.String);
+                switch (t.Kind)
                 {
-                    case VariableType.Bool:
+                    case VariableKind.Bool:
                         parsed = bool.Parse(valueString);
                         break;
-                    case VariableType.Int:
-                        parsed = int.Parse(valueString);
+                    case VariableKind.Int:
+                        parsed = Convert.ToInt64(valueString);
                         break;
-                    case VariableType.Float:
+                    case VariableKind.Float:
                         parsed = double.Parse(valueString);
                         break;
-                    case VariableType.String:
+                    case VariableKind.String:
                         parsed = valueString;
                         break;
-                    case VariableType.DateTime:
+                    case VariableKind.DateTime:
                         parsed = DateTime.Parse(valueString);
                         break;
                     default:
@@ -175,7 +171,7 @@ namespace PLC2MES.Core.Models
 
         public override string ToString()
         {
-            return $"{Name} ({Type}) = {Value}";
+            return Type == null ? $"{Name} (null) = {Value}" : $"{Name} ({Type}) = {Value}";
         }
     }
 }

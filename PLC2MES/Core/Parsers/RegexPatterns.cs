@@ -1,4 +1,4 @@
-namespace PLC2MES.Utils
+﻿namespace PLC2MES.Utils
 {
     public static class RegexPatterns
     {
