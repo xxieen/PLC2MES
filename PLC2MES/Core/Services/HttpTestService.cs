@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading.Tasks;
+using PLC2MES.Core.Evaluators;
 using PLC2MES.Core.Models;
 using PLC2MES.Core.Parsers;
 using PLC2MES.Core.Processors;
@@ -19,6 +20,7 @@ namespace PLC2MES.Core.Services
         private HttpRequestTemplate _requestTemplate;
         private HttpResponseTemplate _response_template;
         private ConditionNode _successCriteria;
+        private readonly ConditionEvaluator _conditionEvaluator = new ConditionEvaluator();
         private string _baseUrl;
 
         public HttpTestService(IVariableManager manager)
@@ -76,8 +78,15 @@ namespace PLC2MES.Core.Services
                 result.ResponseText = _responseProcessor.FormatResponse(response);
                 if (!response.IsSuccess) { result.Success = false; result.ErrorMessage = response.ErrorMessage; sw.Stop(); result.DurationMs = sw.ElapsedMilliseconds; return result; }
                 _responseProcessor.ProcessResponse(response, _response_template);
-                result.ExtractedVariables = new Dictionary<string, Variable>(_variableManager.GetAllVariables());
-                if (_successCriteria != null) { bool cr = _successCriteria.Evaluate(_variableManager.GetAllVariables()); result.SuccessCriteriaResult = cr; result.SuccessCriteriaDetail = BuildCriteriaDetail(cr); result.Success = cr; }
+                var snapshot = _variableManager.GetAllVariables();
+                result.ExtractedVariables = new Dictionary<string, Variable>(snapshot);
+                if (_successCriteria != null)
+                {
+                    bool cr = _conditionEvaluator.Evaluate(_successCriteria, snapshot, out var failureReason);
+                    result.SuccessCriteriaResult = cr;
+                    result.SuccessCriteriaDetail = BuildCriteriaDetail(cr, failureReason);
+                    result.Success = cr;
+                }
                 else { result.Success = response.StatusCode >= 200 && response.StatusCode < 300; }
             }
             catch (Exception ex) { result.Success = false; result.ErrorMessage = ex.Message; }
@@ -88,10 +97,14 @@ namespace PLC2MES.Core.Services
         private string ExtractPath(string url) { return url; }
         private string ExtractBody(string requestText) { var parts = requestText.Split(new[] { "\r\n\r\n", "\n\n" }, StringSplitOptions.None); if (parts.Length > 1) return parts[1].Trim(); return string.Empty; }
 
-        private string BuildCriteriaDetail(bool result)
+        private string BuildCriteriaDetail(bool result, string failureReason)
         {
             var sb = new System.Text.StringBuilder();
             sb.AppendLine($"成功条件评估结果: {(result ? "通过" : "失败")}");
+            if (!result && !string.IsNullOrEmpty(failureReason))
+            {
+                sb.AppendLine($"失败原因: {failureReason}");
+            }
             sb.AppendLine();
             sb.AppendLine("变量值:");
             foreach (var v in _variableManager.GetAllVariables().Values) sb.AppendLine($" {v.Name} = {v.Value} ({v.Type})");

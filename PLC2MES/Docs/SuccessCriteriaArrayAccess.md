@@ -9,30 +9,27 @@
 - 在 `Tokenize` 阶段新增 `.`、`[`、`]` 三种符号的 Token，并将小数解析拆出来，避免与变量访问语法冲突。
 - 变量名块去掉了 `.`，这样 `Orders.Count` 会被识别为「变量 `Orders` + Dot + 变量 `Count`」，为后续访问器解析做准备。
 
-## 2. VariableAccessor 抽象
+## 2. VariableExpression 抽象
 
 文件：`Core/Models/ConditionNodes.cs`
 
-- 新增 `VariableAccessor` + `AccessorSegment` 结构体，统一描述「基础变量 + 一串访问步骤」。
-- `ComparisonNode`、`BooleanVariableNode` 不再只保存 `VariableName`，而是保存完整的访问器；`ToString()` 也同步更新，方便调试。
-- 新建 `VariableAccessorResolver`：
-  - 负责按照访问步骤去变量字典里取值；
-  - 目前支持 `Count` 属性（对 `List<T>`、数组、`IEnumerable`、`JsonArray` 统计长度）与 `[index]`（下标访问）；
-  - 解析过程中会动态更新 `VariableType`，例如 `Orders.Count` 的类型返回 Int，`Orders[0]` 的类型为元素类型，方便比较逻辑继续复用原有的 `Equal`/`GreaterThan` 等函数。
+- `ConditionNode` 现在只是一棵纯 AST，`ComparisonNode`、`BooleanVariableNode` 分别引用 `VariableExpression`。
+- `VariableExpression` + `AccessorSegment` 统一描述「基础变量 + 一串访问步骤」。
+- AST 不再承载执行逻辑，方便做缓存与调试。
 
-## 3. Parser 生成访问器
+## 3. Parser 生成 VariableExpression
 
 文件：`Core/Parsers/SuccessCriteriaParser.cs`
 
-- 增加 `ParseVariableExpression()`：遇到变量时先记录基础名，然后循环读取 `.属性` 和 `[数字]`，分别生成 `AccessorSegmentKind.Property` 或 `Index`。
-- `ParseComparisonExpression()` 调整为直接使用 `VariableAccessor`，剩余流程（解析操作符、常量值）保持不变。
+- `ParseVariableExpression()` 会在变量名后持续读取 `.属性` 与 `[数字]`，写入 AccessorSegment 列表。
+- `ParseComparisonExpression()` 直接把 `VariableExpression` 挂在 `ComparisonNode` 上，剩余流程（操作符、常量值）保持不变。
 
 ## 4. 求值流程
 
-文件：`Core/Models/ConditionNodes.cs`
+文件：`Core/Evaluators/*.cs`
 
-- `ComparisonNode.Evaluate()` 在比较前调用 `VariableAccessorResolver.TryResolve()`，拿到真实值与推断类型，再走原来的比较逻辑。
-- `BooleanVariableNode` 同理，只是只在最终类型为 Bool 时返回结果，保持与先前行为一致。
+- `VariableExpressionEvaluator` 根据访问器链提取真实值，支持 `Count` 和 `[index]`，失败时返回具体错误。
+- `ConditionEvaluator` 递归遍历 AST，调用 `VariableExpressionEvaluator` 取值，再执行比较/逻辑组合。HttpTestService 只和这个类交互。
 
 ## 5. 使用示例
 
@@ -43,3 +40,12 @@
 | `preferences[1].Count` | 语法允许嵌套，但当前仅内置 `Count`/`[index]` 两种操作。 |
 
 若访问器无法应用（例如变量不是数组却写了 `.Count`，或下标越界），`TryResolve` 会返回 `false`，整个条件判定会视为失败，避免抛异常影响主流程。
+
+## 6. 重构后的整体架构
+
+- **Tokenizer (`SuccessCriteriaTokenizer`)**：只负责把表达式切成 Token，语法扩展时先改这里。
+- **Parser (`SuccessCriteriaParser`)**：根据 Token 生成 AST（`ConditionNode` 树），节点内部不夹杂执行逻辑。
+- **VariableExpressionEvaluator**：专门解析 VariableExpression，支持 `.Count`、`[index]`，失败会返回详细错误。
+- **ConditionEvaluator**：递归遍历 AST，调用 VariableExpressionEvaluator 取值，再走比较逻辑。HttpTestService 只和它打交道。
+
+这样分层后，每块职责非常清晰：想新增访问器就改 `VariableExpressionEvaluator`，想新增运算符就扩展 `ConditionEvaluator` + `Parser`，把“看不懂的长文件”拆成了几块小模块。
