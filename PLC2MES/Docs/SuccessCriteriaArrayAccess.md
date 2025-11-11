@@ -38,6 +38,8 @@
 | `preferences.Count > 1` | Count 属性会返回整数，可与数字比较。 |
 | `preferences[0] = "language"` | 对数组/List 取第 0 个元素并比较字符串。 |
 | `preferences[1].Count` | 语法允许嵌套，但当前仅内置 `Count`/`[index]` 两种操作。 |
+| `!(preferences.Count = 0)` | 现在支持 `!` 取反，可以把任意表达式反转。 |
+| `preferences[0] != "admin"` | `!=` 用于判断“不等于”。 |
 
 若访问器无法应用（例如变量不是数组却写了 `.Count`，或下标越界），`TryResolve` 会返回 `false`，整个条件判定会视为失败，避免抛异常影响主流程。
 

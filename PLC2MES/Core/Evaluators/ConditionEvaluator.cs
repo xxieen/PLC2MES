@@ -25,6 +25,8 @@ namespace PLC2MES.Core.Evaluators
             {
                 case LogicalOperatorNode logical:
                     return EvaluateLogical(logical, variables, out failureReason);
+                case NotNode notNode:
+                    return EvaluateNot(notNode, variables, out failureReason);
                 case ComparisonNode comparison:
                     return EvaluateComparison(comparison, variables, out failureReason);
                 case BooleanVariableNode booleanNode:
@@ -75,6 +77,8 @@ namespace PLC2MES.Core.Evaluators
                 {
                     case ComparisonOperator.Equal:
                         return CompareEqual(value, node.CompareValue, resolvedType);
+                    case ComparisonOperator.NotEqual:
+                        return !CompareEqual(value, node.CompareValue, resolvedType);
                     case ComparisonOperator.GreaterThan:
                         return CompareGreaterThan(value, node.CompareValue, resolvedType);
                     case ComparisonOperator.LessThan:
@@ -118,6 +122,19 @@ namespace PLC2MES.Core.Evaluators
         }
 
         #region 比较帮助方法
+
+        private bool EvaluateNot(NotNode node, IDictionary<string, Variable> variables, out string failureReason)
+        {
+            failureReason = null;
+            var inner = Evaluate(node.Inner, variables, out var innerFailure);
+            if (!inner && !string.IsNullOrEmpty(innerFailure))
+            {
+                // 如果子节点失败（变量缺失等），直接把原因向上冒泡，不进行取反
+                failureReason = innerFailure;
+                return false;
+            }
+            return !inner;
+        }
 
         private bool CompareEqual(object value, object compareValue, VariableType type)
         {

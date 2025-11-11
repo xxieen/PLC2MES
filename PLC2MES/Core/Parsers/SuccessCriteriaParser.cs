@@ -36,17 +36,29 @@ namespace PLC2MES.Core.Parsers
 
         private ConditionNode ParseAndExpression()
         {
-            var left = ParseComparisonExpression();
+            var left = ParseUnaryExpression();
             while (CurrentToken().Type == TokenType.LogicalOperator && CurrentToken().Value == "&&")
             {
                 Consume();
-                var right = ParseComparisonExpression();
+                var right = ParseUnaryExpression();
                 left = new LogicalOperatorNode { Operator = LogicalOperator.And, Left = left, Right = right };
             }
             return left;
         }
 
-        private ConditionNode ParseComparisonExpression()
+        private ConditionNode ParseUnaryExpression()
+        {
+            if (CurrentToken().Type == TokenType.Operator && CurrentToken().Value == "!")
+            {
+                Consume();
+                var inner = ParseUnaryExpression();
+                return new NotNode { Inner = inner };
+            }
+
+            return ParsePrimaryExpression();
+        }
+
+        private ConditionNode ParsePrimaryExpression()
         {
             if (CurrentToken().Type == TokenType.LeftParen)
             {
@@ -90,6 +102,7 @@ namespace PLC2MES.Core.Parsers
             "<" => ComparisonOperator.LessThan,
             ">=" => ComparisonOperator.GreaterOrEqual,
             "<=" => ComparisonOperator.LessOrEqual,
+            "!=" => ComparisonOperator.NotEqual,
             "like" => ComparisonOperator.Like,
             _ => throw new Exception($"未知的比较运算符: {op}")
         };

@@ -29,7 +29,7 @@ namespace PLC2MES.Core.Parsers
                         continue;
                     }
 
-                    if (two == ">=" || two == "<=")
+                    if (two == ">=" || two == "<=" || two == "!=")
                     {
                         tokens.Add(new Token(TokenType.Operator, two));
                         i += 2;
@@ -48,7 +48,7 @@ namespace PLC2MES.Core.Parsers
                     }
                 }
 
-                if (expr[i] == '=' || expr[i] == '>' || expr[i] == '<')
+                if (expr[i] == '=' || expr[i] == '>' || expr[i] == '<' || expr[i] == '!')
                 {
                     tokens.Add(new Token(TokenType.Operator, expr[i].ToString()));
                     i++;

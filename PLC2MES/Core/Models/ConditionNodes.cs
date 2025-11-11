@@ -20,6 +20,15 @@ namespace PLC2MES.Core.Models
     }
 
     /// <summary>
+    /// 一元取反节点，语义与逻辑 “非” 相同。
+    /// </summary>
+    public class NotNode : ConditionNode
+    {
+        public ConditionNode Inner { get; set; }
+        public override string ToString() => $"!( {Inner} )";
+    }
+
+    /// <summary>
     /// 表示 "变量 与 常量 做比较" 的节点。
     /// </summary>
     public class ComparisonNode : ConditionNode
