@@ -48,6 +48,62 @@ namespace PLC2MES.Core.Processors
             return node;
         }
 
+        // Added: Allows callers to write values into the JSON tree using JSON Pointer semantics.
+        public bool SetNodeByPointer(JsonNode root, string jsonPointer, JsonNode value)
+        {
+            if (root == null) return false;
+            if (string.IsNullOrEmpty(jsonPointer) || jsonPointer == "/")
+                throw new InvalidOperationException("SetNodeByPointer 不能直接替换根节点");
+
+            var segments = SplitPointerSegments(jsonPointer);
+            if (segments.Length == 0) return false;
+
+            JsonNode current = root;
+            for (int i = 0; i < segments.Length - 1; i++)
+            {
+                var seg = segments[i];
+                if (current is JsonObject obj)
+                {
+                    if (!obj.TryGetPropertyValue(seg, out var next) || next == null)
+                    {
+                        next = new JsonObject();
+                        obj[seg] = next;
+                    }
+                    current = next;
+                }
+                else if (current is JsonArray arr)
+                {
+                    if (!int.TryParse(seg, out var idx))
+                        throw new Exception($"JSON Pointer {jsonPointer} 的段 {seg} 不是有效索引");
+                    while (arr.Count <= idx) arr.Add(null);
+                    if (arr[idx] == null) arr[idx] = new JsonObject();
+                    current = arr[idx];
+                }
+                else
+                {
+                    throw new Exception($"JSON Pointer {jsonPointer} 无法定位父节点");
+                }
+            }
+
+            var last = segments[^1];
+            if (current is JsonObject finalObj)
+            {
+                finalObj[last] = value;
+                return true;
+            }
+
+            if (current is JsonArray finalArr)
+            {
+                if (!int.TryParse(last, out var idx))
+                    throw new Exception($"JSON Pointer {jsonPointer} 的段 {last} 不是有效索引");
+                while (finalArr.Count <= idx) finalArr.Add(null);
+                finalArr[idx] = value;
+                return true;
+            }
+
+            return false;
+        }
+
         /// <summary>
         /// 尝试根据 JSON Pointer 获取 JsonNode
         /// </summary>

@@ -47,19 +47,19 @@ namespace PLC2MES.Core.Processors
             else manager.RegisterVariable(new Variable("$StatusCode", VariableType.CreateScalar(VariableKind.Int), VariableSource.Response) { Value = response.StatusCode });
         }
 
+        // Added: Header processing now iterates ResponseHeaderMapping records only.
         private void ProcessHeaders(HttpResponseData response, HttpResponseTemplate template, IVariableManager manager)
         {
-            if (template?.Mappings == null || template.Mappings.Count ==0) return;
+            if (template?.HeaderMappings == null || template.HeaderMappings.Count == 0) return;
 
-            // group header mappings by header name
-            var headerGroups = template.Mappings
-                .Where(m => !string.IsNullOrWhiteSpace(m.HeaderName))
+            // Added: Work with the slim header model so each mapping only holds header-related info.
+            var headerGroups = template.HeaderMappings
                 .GroupBy(m => m.HeaderName, StringComparer.OrdinalIgnoreCase);
 
             foreach (var hg in headerGroups)
             {
                 string headerName = hg.Key;
-                var mappings = hg.OrderBy(m => m.HeaderGroupIndex).ToList();
+                var mappings = hg.OrderBy(m => m.GroupIndex).ToList();
 
                 // collect values for this header (may be multiple header lines)
                 var values = new List<string>();
@@ -75,12 +75,12 @@ namespace PLC2MES.Core.Processors
                 if (values.Count ==0)
                 {
                     // no header present -> set defaults
-                    foreach (var m in mappings) SetVariableDefaultValue(m.VariableName, m.DataType, manager);
+                    foreach (var m in mappings) SetVariableDefaultValue(m.VariableName, m.VariableType, manager);
                     continue;
                 }
 
                 // try to use mapping.HeaderRegex if provided; otherwise treat whole header value as the extracted value
-                string pattern = mappings.First().HeaderRegex;
+                string pattern = mappings.First().RegexPattern;
                 Regex rx = null;
                 if (!string.IsNullOrWhiteSpace(pattern))
                 {
@@ -102,22 +102,22 @@ namespace PLC2MES.Core.Processors
                         {
                             try
                             {
-                                int gi = m.HeaderGroupIndex <=0 ?1 : m.HeaderGroupIndex;
+                                int gi = m.GroupIndex <= 0 ? 1 : m.GroupIndex;
                                 string captured = (gi < match.Groups.Count) ? match.Groups[gi].Value?.Trim() : null;
                                 if (string.IsNullOrEmpty(captured))
                                 {
-                                    SetVariableDefaultValue(m.VariableName, m.DataType, manager);
+                                    SetVariableDefaultValue(m.VariableName, m.VariableType, manager);
                                 }
                                 else
                                 {
-                                    var converted = TypeConverter.ConvertFromJson(captured, m.DataType);
-                                    SetOrRegisterVariable(m.VariableName, m.DataType, converted, manager);
+                                    var converted = TypeConverter.ConvertFromJson(captured, m.VariableType);
+                                    SetOrRegisterVariable(m.VariableName, m.VariableType, converted, manager);
                                 }
                             }
                             catch (Exception ex)
                             {
                                 Logger.LogError($"HttpResponseProcessor: extracting header mapping {m.VariableName} failed", ex);
-                                SetVariableDefaultValue(m.VariableName, m.DataType, manager);
+                                SetVariableDefaultValue(m.VariableName, m.VariableType, manager);
                             }
                         }
 
@@ -131,13 +131,13 @@ namespace PLC2MES.Core.Processors
                         {
                             try
                             {
-                                var converted = TypeConverter.ConvertFromJson(hv, m.DataType);
-                                SetOrRegisterVariable(m.VariableName, m.DataType, converted, manager);
+                                var converted = TypeConverter.ConvertFromJson(hv, m.VariableType);
+                                SetOrRegisterVariable(m.VariableName, m.VariableType, converted, manager);
                             }
                             catch (Exception ex)
                             {
                                 Logger.LogError($"HttpResponseProcessor: converting header {headerName} for mapping {m.VariableName} failed", ex);
-                                SetVariableDefaultValue(m.VariableName, m.DataType, manager);
+                                SetVariableDefaultValue(m.VariableName, m.VariableType, manager);
                             }
                         }
 
@@ -149,14 +149,15 @@ namespace PLC2MES.Core.Processors
                 if (!anyMatched)
                 {
                     // nothing matched -> defaults
-                    foreach (var m in mappings) SetVariableDefaultValue(m.VariableName, m.DataType, manager);
+                    foreach (var m in mappings) SetVariableDefaultValue(m.VariableName, m.VariableType, manager);
                 }
             }
         }
 
+        // Added: Body processing now branches between pointer reads and array projections using new mappings.
         private void ProcessBody(HttpResponseData response, HttpResponseTemplate template, IVariableManager manager)
         {
-            if (template?.Mappings == null || string.IsNullOrWhiteSpace(response.Body)) return;
+            if (template?.BodyMappings == null || template.BodyMappings.Count == 0 || string.IsNullOrWhiteSpace(response.Body)) return;
 
             System.Text.Json.Nodes.JsonNode node = null;
             try { node = _jsonProcessor.ParseJson(response.Body); }
@@ -166,36 +167,35 @@ namespace PLC2MES.Core.Processors
                 return;
             }
 
-            var bodyMappings = template.Mappings.Where(m => string.IsNullOrWhiteSpace(m.HeaderName));
-            foreach (var m in bodyMappings)
+            // Added: Iterate using the new body mapping model so we can branch on array projections quickly.
+            foreach (var m in template.BodyMappings)
             {
                 try
                 {
-                    if (!string.IsNullOrWhiteSpace(m.CollectionPointer))
+                    if (m.IsArrayProjection)
                     {
-                        // 新增数组投影处理逻辑：把同级元素的值聚合成数组
                         ProcessCollectionMapping(node, m, manager);
                         continue;
                     }
 
                     object val = null;
-                    if (!string.IsNullOrWhiteSpace(m.JsonPointer))
-                        val = _jsonProcessor.GetValueByPointer(node, m.JsonPointer);
+                    if (!string.IsNullOrWhiteSpace(m.Pointer))
+                        val = _jsonProcessor.GetValueByPointer(node, m.Pointer);
 
                     if (val == null)
                     {
-                        SetVariableDefaultValue(m.VariableName, m.DataType, manager);
+                        SetVariableDefaultValue(m.VariableName, m.VariableType, manager);
                     }
                     else
                     {
-                        var converted = TypeConverter.ConvertFromJson(val, m.DataType);
-                        SetOrRegisterVariable(m.VariableName, m.DataType, converted, manager);
+                        var converted = TypeConverter.ConvertFromJson(val, m.VariableType);
+                        SetOrRegisterVariable(m.VariableName, m.VariableType, converted, manager);
                     }
                 }
                 catch (Exception ex)
                 {
                     Logger.LogError($"HttpResponseProcessor: failed extracting body mapping {m.VariableName}", ex);
-                    SetVariableDefaultValue(m.VariableName, m.DataType, manager);
+                    SetVariableDefaultValue(m.VariableName, m.VariableType, manager);
                 }
             }
         }
@@ -247,7 +247,7 @@ namespace PLC2MES.Core.Processors
             {
                 if (response.StatusCode != template.ExpectedStatusCode.Value) return false;
             }
-            if (template.Mappings.Count >0 && string.IsNullOrWhiteSpace(response.Body)) return false;
+            if (template.BodyMappings.Count > 0 && string.IsNullOrWhiteSpace(response.Body)) return false;
             return true;
         }
 
@@ -275,38 +275,35 @@ namespace PLC2MES.Core.Processors
             return sb.ToString();
         }
 
-        private void ProcessCollectionMapping(JsonNode rootNode, ResponseMapping mapping, IVariableManager manager)
+        // Added: Aggregates array values using the projection info captured during parsing.
+        private void ProcessCollectionMapping(JsonNode rootNode, ResponseBodyMapping mapping, IVariableManager manager)
         {
             try
             {
-                // 找到模板解析阶段记录的数组根节点，例如 /preferences
-                var collectionNode = _jsonProcessor.GetNodeByPointer(rootNode, mapping.CollectionPointer);
+                // Added: Use projection metadata captured during parsing to aggregate an array.
+                var collectionNode = _jsonProcessor.GetNodeByPointer(rootNode, mapping.Projection.CollectionPointer);
                 if (collectionNode is not JsonArray jsonArray)
                 {
-                    // 模板里声明了字段，但响应没有对应数组，直接回退到默认值
-                    SetVariableDefaultValue(mapping.VariableName, mapping.DataType, manager);
+                    SetVariableDefaultValue(mapping.VariableName, mapping.VariableType, manager);
                     return;
                 }
 
-                var elementType = mapping.DataType?.ElementType ?? VariableType.CreateScalar(VariableKind.String);
+                var elementType = mapping.VariableType?.ElementType ?? VariableType.CreateScalar(VariableKind.String);
                 var results = new List<object>();
 
                 foreach (var element in jsonArray)
                 {
-                    // 针对数组里的每个元素，继续使用 ElementRelativePointer 取出具体字段
-                    var rawValue = _jsonProcessor.GetValueFromNode(element, mapping.ElementRelativePointer);
-                    // ConvertFromJson 可以把 string/int/datetime 等统一转换成变量声明的元素类型
+                    var rawValue = _jsonProcessor.GetValueFromNode(element, mapping.Projection.ElementPointer);
                     var convertedElement = TypeConverter.ConvertFromJson(rawValue, elementType);
                     results.Add(convertedElement);
                 }
 
-                // results 即为聚合好的数组
-                SetOrRegisterVariable(mapping.VariableName, mapping.DataType, results, manager);
+                SetOrRegisterVariable(mapping.VariableName, mapping.VariableType, results, manager);
             }
             catch (Exception ex)
             {
                 Logger.LogError($"HttpResponseProcessor: failed extracting collection mapping {mapping.VariableName}", ex);
-                SetVariableDefaultValue(mapping.VariableName, mapping.DataType, manager);
+                SetVariableDefaultValue(mapping.VariableName, mapping.VariableType, manager);
             }
         }
     }
